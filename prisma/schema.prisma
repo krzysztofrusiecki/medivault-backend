@@ -11,10 +11,23 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Timestamp helpers for common datetime fields
-model BaseModel {
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// User model for authentication and profile management
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  firstName     String
+  lastName      String
+  gender        Gender?
+  birthDate     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  @@ignore
+  @@map("users")
+}
+
+// Gender enum for user profile
+enum Gender {
+  MALE
+  FEMALE
 }
