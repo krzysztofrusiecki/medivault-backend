@@ -1,4 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from "@prisma/client";
+import * as argon2 from "argon2";
 
 const prisma = new PrismaClient();
 
@@ -6,14 +7,59 @@ const prisma = new PrismaClient();
  * Database seeding script.
  *
  * This file runs after migrations to populate the database with initial data.
- * Currently set up for infrastructure only - no sample data is populated.
- *
- * To add seed data, implement the seeding logic below.
  * Run with: pnpm prisma db seed
  */
 async function main() {
-  // TODO: Add seed data as needed during feature development
-  console.log('Database seeding completed.');
+  console.log("Starting database seeding...");
+
+  // Clear existing data
+  await prisma.user.deleteMany();
+  console.log("Cleared existing users");
+
+  // Hash passwords
+  const password1 = await argon2.hash("Password123!");
+  const password2 = await argon2.hash("SecurePass456!");
+  const password3 = await argon2.hash("TestUser789!");
+
+  // Create 3 sample users
+  const user1 = await prisma.user.create({
+    data: {
+      email: "john.doe@medivault.com",
+      passwordHash: password1,
+      firstName: "John",
+      lastName: "Doe",
+      gender: "MALE",
+      birthDate: new Date("1990-05-15"),
+    },
+  });
+
+  const user2 = await prisma.user.create({
+    data: {
+      email: "jane.smith@medivault.com",
+      passwordHash: password2,
+      firstName: "Jane",
+      lastName: "Smith",
+      gender: "FEMALE",
+      birthDate: new Date("1992-08-22"),
+    },
+  });
+
+  const user3 = await prisma.user.create({
+    data: {
+      email: "alex.johnson@medivault.com",
+      passwordHash: password3,
+      firstName: "Alex",
+      lastName: "Johnson",
+      gender: null,
+      birthDate: new Date("1988-12-03"),
+    },
+  });
+
+  console.log("Created 3 sample users:");
+  console.log(`  - ${user1.email}`);
+  console.log(`  - ${user2.email}`);
+  console.log(`  - ${user3.email}`);
+  console.log("Database seeding completed.");
 }
 
 main()
@@ -21,7 +67,7 @@ main()
     await prisma.$disconnect();
   })
   .catch(async (e) => {
-    console.error('Seeding failed:', e);
+    console.error("Seeding failed:", e);
     await prisma.$disconnect();
     process.exit(1);
   });

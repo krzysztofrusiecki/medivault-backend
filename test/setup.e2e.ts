@@ -5,10 +5,10 @@
  * Runs before all tests to initialize the test database.
  */
 
-import { setupTestDatabase, teardownTestDatabase } from './database/setup';
+import { setupTestDatabase, teardownTestDatabase } from "./database/setup";
 
 // Use in-memory SQLite for testing
-process.env.DATABASE_URL = 'file:memdb1?mode=memory&cache=shared';
+process.env.DATABASE_URL = "file:memdb1?mode=memory&cache=shared";
 
 // Setup test database before tests run
 beforeAll(async () => {

@@ -1,5 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-import path from 'path';
+import { PrismaClient } from "@prisma/client";
 
 /**
  * Test database setup utility.
@@ -14,7 +13,7 @@ let prisma: PrismaClient | null = null;
 export async function setupTestDatabase() {
   // Use in-memory SQLite for tests
   const databaseUrl =
-    process.env.DATABASE_TEST_URL || 'file:memdb1?mode=memory&cache=shared';
+    process.env.DATABASE_TEST_URL || "file:memdb1?mode=memory&cache=shared";
 
   prisma = new PrismaClient({
     datasources: {
@@ -26,10 +25,10 @@ export async function setupTestDatabase() {
 
   // Run migrations on test database
   try {
-    await prisma.$executeRawUnsafe('SELECT 1');
-    console.log('Test database connection established');
+    await prisma.$executeRawUnsafe("SELECT 1");
+    console.log("Test database connection established");
   } catch (error) {
-    console.error('Failed to connect to test database:', error);
+    console.error("Failed to connect to test database:", error);
     throw error;
   }
 
@@ -45,7 +44,9 @@ export async function teardownTestDatabase() {
 
 export function getTestDatabase() {
   if (!prisma) {
-    throw new Error('Test database not initialized. Call setupTestDatabase first.');
+    throw new Error(
+      "Test database not initialized. Call setupTestDatabase first.",
+    );
   }
   return prisma;
 }
