@@ -18,6 +18,8 @@ jobs:
         node-version: [24.x]
 
     env:
+      PORT: 3000
+      NODE_ENV: production
       DATABASE_URL: postgresql://user:password@localhost:5432/medivault_test
 
     steps:
