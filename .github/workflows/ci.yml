@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - master
-      - "**"
   pull_request:
     branches:
       - master
@@ -47,9 +46,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Generate Prisma client
-        run: pnpm db:generate
 
       - name: Lint
         run: pnpm lint
