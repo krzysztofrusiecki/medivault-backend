@@ -7,9 +7,6 @@
 
 import { setupTestDatabase, teardownTestDatabase } from "./database/setup";
 
-// Use in-memory SQLite for testing
-process.env.DATABASE_URL = "file:memdb1?mode=memory&cache=shared";
-
 // Setup test database before tests run
 beforeAll(async () => {
   await setupTestDatabase();

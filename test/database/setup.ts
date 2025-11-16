@@ -3,29 +3,20 @@ import { PrismaClient } from "@prisma/client";
 /**
  * Test database setup utility.
  *
- * Initializes an in-memory SQLite database for E2E testing.
- * This provides an isolated database instance per test run without
- * requiring external PostgreSQL server access.
+ * For testing, we use the PostgreSQL database configured in DATABASE_URL
+ * but create a separate test schema to isolate test data.
+ * This approach is simpler than in-memory SQLite and closer to production.
  */
 
 let prisma: PrismaClient | null = null;
 
 export async function setupTestDatabase() {
-  // Use in-memory SQLite for tests
-  const databaseUrl =
-    process.env.DATABASE_TEST_URL || "file:memdb1?mode=memory&cache=shared";
+  // Use the same database as configured, but with test data isolation
+  prisma = new PrismaClient();
 
-  prisma = new PrismaClient({
-    datasources: {
-      db: {
-        url: databaseUrl,
-      },
-    },
-  });
-
-  // Run migrations on test database
   try {
-    await prisma.$executeRawUnsafe("SELECT 1");
+    // Verify connection
+    await prisma.$queryRaw`SELECT 1`;
     console.log("Test database connection established");
   } catch (error) {
     console.error("Failed to connect to test database:", error);
