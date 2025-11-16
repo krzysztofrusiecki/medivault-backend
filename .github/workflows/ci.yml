@@ -17,6 +17,9 @@ jobs:
       matrix:
         node-version: [24.x]
 
+    env:
+      DATABASE_URL: postgresql://user:password@localhost:5432/medivault_test
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -46,6 +49,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
 
       - name: Lint
         run: pnpm lint
