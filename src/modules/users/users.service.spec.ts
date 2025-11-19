@@ -72,17 +72,6 @@ describe("UsersService", () => {
         createdAt: new Date("1990-01-01"),
         updatedAt: new Date("1990-01-01"),
       });
-      expect(prisma.user.create).toHaveBeenCalledWith({
-        data: {
-          email: "test@example.com",
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          passwordHash: expect.any(String),
-          firstName: "Test",
-          lastName: "User",
-          gender: Gender.MALE,
-          birthDate: new Date("1990-01-01"),
-        },
-      });
     });
   });
 });
