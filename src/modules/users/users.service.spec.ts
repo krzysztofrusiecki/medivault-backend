@@ -1,7 +1,6 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { UsersService } from "./users.service";
 import { PrismaService } from "../../infrastructure/prisma/prisma.service";
-import { CreateUserDto } from "./dto/create-user.dto";
 import { Gender, Role } from "@prisma/client";
 
 describe("UsersService", () => {
@@ -42,13 +41,20 @@ describe("UsersService", () => {
 
   describe("create", () => {
     it("should create a new user", async () => {
-      const createUserDto: CreateUserDto = {
+      const createUserDto: {
+        email: string;
+        password: string;
+        firstName: string;
+        lastName: string;
+        gender: Gender;
+        birthDate: Date;
+      } = {
         email: "test@example.com",
         password: "password",
         firstName: "Test",
         lastName: "User",
         gender: "MALE",
-        birthDate: new Date("1990-01-01").toISOString(),
+        birthDate: new Date("1990-01-01"),
       };
 
       jest.spyOn(prisma.user, "create").mockResolvedValue(mockUser);
@@ -69,13 +75,12 @@ describe("UsersService", () => {
       expect(prisma.user.create).toHaveBeenCalledWith({
         data: {
           email: "test@example.com",
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          passwordHash: expect.any(String),
           firstName: "Test",
           lastName: "User",
           gender: Gender.MALE,
-          birthDate: new Date("1990-01-01").toISOString(),
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          passwordHash: expect.any(String),
-          role: "USER",
+          birthDate: new Date("1990-01-01"),
         },
       });
     });
