@@ -38,3 +38,35 @@ enum Role {
   LAB_ADMIN
   SUPER_ADMIN
 }
+
+model Analyte {
+  id            String   @id @default(cuid())
+  code          String   @unique
+  name          String
+  valueType     AnalyteValueType
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  units          AnalyteUnit[]
+
+  @@map("analytes")
+}
+
+enum AnalyteValueType {
+  NUMERIC
+  TEXT
+}
+
+model AnalyteUnit {
+  id                String   @id @default(cuid())
+  analyteId         String
+  unit              String
+  isCanonical       Boolean  @default(false)
+  factorToCanonical Decimal  @db.Decimal(20,10)  // value * factor + offset => canonical
+  offset            Decimal  @db.Decimal(20,10) @default(0)
+
+  analyte Analyte @relation(fields: [analyteId], references: [id])
+
+  @@unique([analyteId, unit])
+  @@map("analyte_units")
+}
