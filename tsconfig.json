@@ -22,6 +22,14 @@
     "strictBindCallApply": true,
     "noFallthroughCasesInSwitch": true,
     "strictPropertyInitialization": false,
-    "strict": true
+    "strict": true,
+    "paths": {
+      "@/infrastructure/prisma": [
+        "./src/infrastructure/prisma"
+      ],
+      "@/modules": [
+        "./src/modules"
+      ]
+    }
   }
 }
