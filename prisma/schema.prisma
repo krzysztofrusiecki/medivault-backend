@@ -12,17 +12,17 @@ datasource db {
 
 // User model for authentication and profile management
 model User {
-  id            String   @id @default(cuid())
-  email         String   @unique
-  passwordHash  String
-  firstName     String
-  lastName      String
-  gender        Gender?
-  birthDate     DateTime?
-  role          Role     @default(USER)
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  gender       Gender?
+  birthDate    DateTime?
+  role         Role      @default(USER)
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("users")
 }
@@ -37,4 +37,36 @@ enum Role {
   USER
   LAB_ADMIN
   SUPER_ADMIN
+}
+
+model Analyte {
+  id        String           @id @default(cuid())
+  slug      String           @unique
+  name      String
+  valueType AnalyteValueType
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  units AnalyteUnit[]
+
+  @@map("analytes")
+}
+
+enum AnalyteValueType {
+  NUMERIC
+  TEXT
+}
+
+model AnalyteUnit {
+  id                String  @id @default(cuid())
+  analyteId         String
+  unit              String
+  isCanonical       Boolean @default(false)
+  factorToCanonical Decimal @db.Decimal(20, 10) // value * factor + offset => canonical
+  offset            Decimal @default(0) @db.Decimal(20, 10)
+
+  analyte Analyte @relation(fields: [analyteId], references: [id])
+
+  @@unique([analyteId, unit])
+  @@map("analyte_units")
 }

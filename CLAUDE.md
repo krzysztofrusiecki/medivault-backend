@@ -20,6 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Common Development Commands
 
 ### Build & Run
+
 - `pnpm build` - Compile TypeScript to dist/
 - `pnpm start` - Run compiled application
 - `pnpm start:dev` - Development mode with watch
@@ -27,10 +28,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `pnpm start:prod` - Run optimized production build
 
 ### Code Quality
+
 - `pnpm lint` - Run ESLint with automatic fixes
 - `pnpm format` - Format code with Prettier
 
 ### Testing
+
 - `pnpm test` - Run all unit tests matching `*.spec.ts`
 - `pnpm test:watch` - Run tests in watch mode
 - `pnpm test:cov` - Run tests with coverage report
@@ -51,22 +54,26 @@ src/
 ## Architecture Notes
 
 ### Module Organization
+
 - The application is modular using NestJS conventions
 - Root `AppModule` imports feature modules
 - Each feature should have its own module, controller, service, and DTO files
 
 ### Configuration
+
 - Environment variables should be validated using Zod
 - Configuration utilities should be placed in `src/config/`
 - Never commit `.env` files (use `.env.example` instead)
 
 ### Testing Strategy
+
 - Unit tests colocate with source files as `*.spec.ts`
 - E2E tests located in `test/` directory
 - Jest is configured to run tests from `src` directory
 - Test coverage reports generated in `coverage/` directory
 
 ### Build Output
+
 - TypeScript compiles to `dist/` directory
 - NestJS CLI (`nest-cli.json`) is configured to delete outDir on rebuild for clean builds
 
@@ -86,3 +93,7 @@ src/
 - TypeScript strict mode enabled - all implicit any is forbidden
 - Use Node.js ES modules (`nodenext` in tsconfig)
 - Decorator metadata emission enabled for NestJS dependency injection
+
+## Git
+
+- Commit message should be short (1 line)
