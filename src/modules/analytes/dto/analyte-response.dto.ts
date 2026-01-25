@@ -1,5 +1,6 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { AnalyteValueType } from "@prisma/client";
+import { AnalyteUnitResponseDto } from "../../analyte-units/dto/analyte-unit-response.dto";
 
 export class AnalyteResponseDto {
   @ApiProperty({
@@ -38,4 +39,12 @@ export class AnalyteResponseDto {
     example: "2025-11-20T10:00:00Z",
   })
   updatedAt: Date;
+
+  @ApiProperty({
+    description:
+      "Available units for this analyte (only for NUMERIC value types)",
+    type: [AnalyteUnitResponseDto],
+    required: false,
+  })
+  units?: AnalyteUnitResponseDto[];
 }

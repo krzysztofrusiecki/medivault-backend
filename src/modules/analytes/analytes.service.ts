@@ -6,12 +6,16 @@ import {
 import { CreateAnalyteDto } from "./dto/create-analyte.dto";
 import { UpdateAnalyteDto } from "./dto/update-analyte.dto";
 import { AnalyteResponseDto } from "./dto/analyte-response.dto";
-import { Analyte, Prisma } from "@prisma/client";
+import { Analyte, AnalyteUnit, AnalyteValueType, Prisma } from "@prisma/client";
 import { PrismaService } from "@/infrastructure/prisma";
+import { AnalyteUnitsService } from "../analyte-units";
 
 @Injectable()
 export class AnalytesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private analyteUnitsService: AnalyteUnitsService,
+  ) {}
 
   async create(
     createAnalyteDto: CreateAnalyteDto,
@@ -24,6 +28,9 @@ export class AnalytesService {
           code,
           name,
           valueType,
+        },
+        include: {
+          units: true,
         },
       });
 
@@ -43,7 +50,11 @@ export class AnalytesService {
   }
 
   async findAll(): Promise<AnalyteResponseDto[]> {
-    const analytes = await this.prisma.analyte.findMany();
+    const analytes = await this.prisma.analyte.findMany({
+      include: {
+        units: true,
+      },
+    });
 
     return analytes.map((analyte) => this.mapToResponseDto(analyte));
   }
@@ -51,6 +62,9 @@ export class AnalytesService {
   async findOne(id: string): Promise<AnalyteResponseDto> {
     const analyte = await this.prisma.analyte.findUnique({
       where: { id },
+      include: {
+        units: true,
+      },
     });
 
     if (!analyte) {
@@ -76,6 +90,9 @@ export class AnalytesService {
       const analyte = await this.prisma.analyte.update({
         where: { id },
         data: updateAnalyteDto,
+        include: {
+          units: true,
+        },
       });
 
       return this.mapToResponseDto(analyte);
@@ -107,8 +124,10 @@ export class AnalytesService {
     });
   }
 
-  private mapToResponseDto(analyte: Analyte): AnalyteResponseDto {
-    return {
+  private mapToResponseDto(
+    analyte: Analyte & { units: AnalyteUnit[] },
+  ): AnalyteResponseDto {
+    const response: AnalyteResponseDto = {
       id: analyte.id,
       code: analyte.code,
       name: analyte.name,
@@ -116,5 +135,18 @@ export class AnalytesService {
       createdAt: analyte.createdAt,
       updatedAt: analyte.updatedAt,
     };
+
+    // Only include units for NUMERIC value types
+    if (
+      analyte.valueType === AnalyteValueType.NUMERIC &&
+      analyte.units &&
+      Array.isArray(analyte.units)
+    ) {
+      response.units = analyte.units.map((unit) =>
+        this.analyteUnitsService.mapToResponseDto(unit),
+      );
+    }
+
+    return response;
   }
 }

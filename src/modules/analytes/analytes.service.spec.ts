@@ -1,8 +1,9 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { AnalytesService } from "./analytes.service";
 import { PrismaService } from "@/infrastructure/prisma";
-import { AnalyteValueType, Prisma } from "@prisma/client";
+import { AnalyteUnit, AnalyteValueType, Prisma } from "@prisma/client";
 import { ConflictException, NotFoundException } from "@nestjs/common";
+import { AnalyteUnitsService } from "../analyte-units";
 
 describe("AnalytesService", () => {
   let service: AnalytesService;
@@ -15,6 +16,7 @@ describe("AnalytesService", () => {
     valueType: AnalyteValueType.NUMERIC,
     createdAt: new Date(),
     updatedAt: new Date(),
+    units: [],
   };
 
   beforeEach(async () => {
@@ -31,6 +33,18 @@ describe("AnalytesService", () => {
               update: jest.fn(),
               delete: jest.fn(),
             },
+          },
+        },
+        {
+          provide: AnalyteUnitsService,
+          useValue: {
+            mapToResponseDto: jest.fn((unit: AnalyteUnit) => ({
+              id: unit.id,
+              unit: unit.unit,
+              isCanonical: unit.isCanonical,
+              factorToCanonical: Number(unit.factorToCanonical),
+              offset: Number(unit.offset),
+            })),
           },
         },
       ],
@@ -58,9 +72,15 @@ describe("AnalytesService", () => {
 
       const result = await service.create(createAnalyteDto);
 
-      expect(result).toEqual(mockAnalyte);
+      expect(result).toMatchObject({
+        id: mockAnalyte.id,
+        code: mockAnalyte.code,
+        name: mockAnalyte.name,
+        valueType: mockAnalyte.valueType,
+      });
       expect(prismaService.analyte.create).toHaveBeenCalledWith({
         data: createAnalyteDto,
+        include: { units: true },
       });
     });
 
@@ -97,8 +117,16 @@ describe("AnalytesService", () => {
 
       const result = await service.findAll();
 
-      expect(result).toEqual(mockAnalytes);
-      expect(prismaService.analyte.findMany).toHaveBeenCalled();
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        id: mockAnalyte.id,
+        code: mockAnalyte.code,
+        name: mockAnalyte.name,
+        valueType: mockAnalyte.valueType,
+      });
+      expect(prismaService.analyte.findMany).toHaveBeenCalledWith({
+        include: { units: true },
+      });
     });
 
     it("should return empty array if no analytes exist", async () => {
@@ -120,9 +148,15 @@ describe("AnalytesService", () => {
 
       const result = await service.findOne(id);
 
-      expect(result).toEqual(mockAnalyte);
+      expect(result).toMatchObject({
+        id: mockAnalyte.id,
+        code: mockAnalyte.code,
+        name: mockAnalyte.name,
+        valueType: mockAnalyte.valueType,
+      });
       expect(prismaService.analyte.findUnique).toHaveBeenCalledWith({
         where: { id },
+        include: { units: true },
       });
     });
 
@@ -151,10 +185,16 @@ describe("AnalytesService", () => {
 
       const result = await service.update(id, updateAnalyteDto);
 
-      expect(result).toEqual({ ...mockAnalyte, ...updateAnalyteDto });
+      expect(result).toMatchObject({
+        id: mockAnalyte.id,
+        code: mockAnalyte.code,
+        name: "Updated Glucose",
+        valueType: mockAnalyte.valueType,
+      });
       expect(prismaService.analyte.update).toHaveBeenCalledWith({
         where: { id },
         data: updateAnalyteDto,
+        include: { units: true },
       });
     });
 
