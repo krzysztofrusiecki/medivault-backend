@@ -4,7 +4,7 @@ CREATE TYPE "AnalyteValueType" AS ENUM ('NUMERIC', 'TEXT');
 -- CreateTable
 CREATE TABLE "analytes" (
     "id" TEXT NOT NULL,
-    "code" TEXT NOT NULL,
+    "slug" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "valueType" "AnalyteValueType" NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -26,7 +26,7 @@ CREATE TABLE "analyte_units" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "analytes_code_key" ON "analytes"("code");
+CREATE UNIQUE INDEX "analytes_slug_key" ON "analytes"("slug");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "analyte_units_analyteId_unit_key" ON "analyte_units"("analyteId", "unit");

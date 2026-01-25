@@ -41,7 +41,7 @@ enum Role {
 
 model Analyte {
   id        String           @id @default(cuid())
-  code      String           @unique
+  slug      String           @unique
   name      String
   valueType AnalyteValueType
   createdAt DateTime         @default(now())

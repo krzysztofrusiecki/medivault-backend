@@ -10,10 +10,10 @@ export class AnalyteResponseDto {
   id: string;
 
   @ApiProperty({
-    description: "Unique code identifier for the analyte",
+    description: "Unique slug identifier for the analyte",
     example: "PRL",
   })
-  code: string;
+  slug: string;
 
   @ApiProperty({
     description: "Human-readable name of the analyte",

@@ -11,7 +11,7 @@ describe("AnalytesService", () => {
 
   const mockAnalyte = {
     id: "cuid123456",
-    code: "GLU",
+    slug: "GLU",
     name: "Glucose",
     valueType: AnalyteValueType.NUMERIC,
     createdAt: new Date(),
@@ -61,7 +61,7 @@ describe("AnalytesService", () => {
   describe("create", () => {
     it("should create an analyte successfully", async () => {
       const createAnalyteDto = {
-        code: "GLU",
+        slug: "GLU",
         name: "Glucose",
         valueType: AnalyteValueType.NUMERIC,
       };
@@ -74,7 +74,7 @@ describe("AnalytesService", () => {
 
       expect(result).toMatchObject({
         id: mockAnalyte.id,
-        code: mockAnalyte.code,
+        slug: mockAnalyte.slug,
         name: mockAnalyte.name,
         valueType: mockAnalyte.valueType,
       });
@@ -84,16 +84,16 @@ describe("AnalytesService", () => {
       });
     });
 
-    it("should throw ConflictException if code already exists", async () => {
+    it("should throw ConflictException if slug already exists", async () => {
       const createAnalyteDto = {
-        code: "GLU",
+        slug: "GLU",
         name: "Glucose",
         valueType: AnalyteValueType.NUMERIC,
       };
 
       jest.spyOn(prismaService.analyte, "create").mockRejectedValue(
         new Prisma.PrismaClientKnownRequestError(
-          'Analyte with code "GLU" already exists',
+          'Analyte with slug "GLU" already exists',
           {
             code: "P2002",
             clientVersion: "6.0.0",
@@ -120,7 +120,7 @@ describe("AnalytesService", () => {
       expect(result).toHaveLength(1);
       expect(result[0]).toMatchObject({
         id: mockAnalyte.id,
-        code: mockAnalyte.code,
+        slug: mockAnalyte.slug,
         name: mockAnalyte.name,
         valueType: mockAnalyte.valueType,
       });
@@ -150,7 +150,7 @@ describe("AnalytesService", () => {
 
       expect(result).toMatchObject({
         id: mockAnalyte.id,
-        code: mockAnalyte.code,
+        slug: mockAnalyte.slug,
         name: mockAnalyte.name,
         valueType: mockAnalyte.valueType,
       });
@@ -187,7 +187,7 @@ describe("AnalytesService", () => {
 
       expect(result).toMatchObject({
         id: mockAnalyte.id,
-        code: mockAnalyte.code,
+        slug: mockAnalyte.slug,
         name: "Updated Glucose",
         valueType: mockAnalyte.valueType,
       });
@@ -208,10 +208,10 @@ describe("AnalytesService", () => {
       );
     });
 
-    it("should throw ConflictException if code already exists", async () => {
+    it("should throw ConflictException if slug already exists", async () => {
       const id = "cuid123456";
       const updateAnalyteDto = {
-        code: "EXISTING_CODE",
+        slug: "EXISTING_SLUG",
       };
 
       jest
@@ -219,7 +219,7 @@ describe("AnalytesService", () => {
         .mockResolvedValue(mockAnalyte);
       jest.spyOn(prismaService.analyte, "update").mockRejectedValue(
         new Prisma.PrismaClientKnownRequestError(
-          'Analyte with code "EXISTING_CODE" already exists',
+          'Analyte with slug "EXISTING_SLUG" already exists',
           {
             code: "P2002",
             clientVersion: "6.0.0",

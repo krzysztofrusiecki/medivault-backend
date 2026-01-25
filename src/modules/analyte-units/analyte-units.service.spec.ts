@@ -15,7 +15,7 @@ describe("AnalyteUnitsService", () => {
 
   const mockAnalyte = {
     id: "analyte123",
-    code: "GLU",
+    slug: "GLU",
     name: "Glucose",
     valueType: AnalyteValueType.NUMERIC,
     createdAt: new Date(),

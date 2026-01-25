@@ -20,12 +20,12 @@ export class AnalytesService {
   async create(
     createAnalyteDto: CreateAnalyteDto,
   ): Promise<AnalyteResponseDto> {
-    const { code, name, valueType } = createAnalyteDto;
+    const { slug, name, valueType } = createAnalyteDto;
 
     try {
       const analyte = await this.prisma.analyte.create({
         data: {
-          code,
+          slug,
           name,
           valueType,
         },
@@ -36,13 +36,13 @@ export class AnalytesService {
 
       return this.mapToResponseDto(analyte);
     } catch (error) {
-      // Handle unique constraint violation on code
+      // Handle unique constraint violation on slug
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2002"
       ) {
         throw new ConflictException(
-          `Analyte with code "${code}" already exists`,
+          `Analyte with slug "${slug}" already exists`,
         );
       }
       throw error;
@@ -97,13 +97,13 @@ export class AnalytesService {
 
       return this.mapToResponseDto(analyte);
     } catch (error) {
-      // Handle unique constraint violation on code
+      // Handle unique constraint violation on slug
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2002"
       ) {
         throw new ConflictException(
-          `Analyte with code "${updateAnalyteDto.code}" already exists`,
+          `Analyte with slug "${updateAnalyteDto.slug}" already exists`,
         );
       }
       throw error;
@@ -129,7 +129,7 @@ export class AnalytesService {
   ): AnalyteResponseDto {
     const response: AnalyteResponseDto = {
       id: analyte.id,
-      code: analyte.code,
+      slug: analyte.slug,
       name: analyte.name,
       valueType: analyte.valueType,
       createdAt: analyte.createdAt,

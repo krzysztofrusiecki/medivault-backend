@@ -3,13 +3,13 @@ import { IsOptional, IsString } from "class-validator";
 
 export class UpdateAnalyteDto {
   @ApiProperty({
-    description: "Unique code identifier for the analyte",
+    description: "Unique slug identifier for the analyte",
     example: "PRL",
     required: false,
   })
   @IsString()
   @IsOptional()
-  code?: string;
+  slug?: string;
 
   @ApiProperty({
     description: "Human-readable name of the analyte",

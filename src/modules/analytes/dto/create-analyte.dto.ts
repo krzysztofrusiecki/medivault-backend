@@ -4,12 +4,12 @@ import { AnalyteValueType } from "@prisma/client";
 
 export class CreateAnalyteDto {
   @ApiProperty({
-    description: "Unique code identifier for the analyte",
+    description: "Unique slug identifier for the analyte",
     example: "PRL",
   })
   @IsString()
   @IsNotEmpty()
-  code: string;
+  slug: string;
 
   @ApiProperty({
     description: "Human-readable name of the analyte",
