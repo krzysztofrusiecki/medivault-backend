@@ -25,7 +25,7 @@ import { UpdateAnalyteUnitDto } from "./dto/update-analyte-unit.dto";
 import { AnalyteUnitResponseDto } from "./dto/analyte-unit-response.dto";
 import { JwtGuard } from "../auth/guards/jwt.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
-import { Roles } from "../auth/decorators/roles.decorator";
+import { Roles } from "@/common/decorators";
 
 @ApiTags("Analyte Units")
 @ApiBearerAuth()

@@ -24,6 +24,8 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  testResults TestResult[]
+
   @@map("users")
 }
 
@@ -47,7 +49,8 @@ model Analyte {
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
-  units AnalyteUnit[]
+  units       AnalyteUnit[]
+  testResults TestResult[]
 
   @@map("analytes")
 }
@@ -65,8 +68,34 @@ model AnalyteUnit {
   factorToCanonical Decimal @db.Decimal(20, 10) // value * factor + offset => canonical
   offset            Decimal @default(0) @db.Decimal(20, 10)
 
-  analyte Analyte @relation(fields: [analyteId], references: [id])
+  analyte     Analyte      @relation(fields: [analyteId], references: [id])
+  testResults TestResult[]
 
   @@unique([analyteId, unit])
   @@map("analyte_units")
+}
+
+model TestResult {
+  id        String @id @default(cuid())
+  userId    String
+  analyteId String
+
+  analyteUnitId  String?
+  valueRaw       Decimal? @db.Decimal(20, 10)
+  value          Decimal? @db.Decimal(20, 10)
+  factorSnapshot Decimal? @db.Decimal(20, 10)
+  offsetSnapshot Decimal? @db.Decimal(20, 10)
+
+  valueText String?
+
+  sampleDate DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user        User         @relation(fields: [userId], references: [id])
+  analyte     Analyte      @relation(fields: [analyteId], references: [id])
+  analyteUnit AnalyteUnit? @relation(fields: [analyteUnitId], references: [id])
+
+  @@index([userId, analyteId, sampleDate])
+  @@map("test_results")
 }
