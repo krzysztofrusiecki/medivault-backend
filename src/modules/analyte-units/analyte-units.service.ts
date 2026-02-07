@@ -166,4 +166,29 @@ export class AnalyteUnitsService {
       offset: Number(analyteUnit.offset),
     };
   }
+
+  async getConversionFactors(
+    unitId: string,
+    analyteId: string,
+  ): Promise<{ factor: number; offset: number }> {
+    const unit = await this.prisma.analyteUnit.findUnique({
+      where: { id: unitId },
+      select: { analyteId: true, factorToCanonical: true, offset: true },
+    });
+
+    if (!unit) {
+      throw new NotFoundException(`Unit with ID "${unitId}" not found`);
+    }
+
+    if (unit.analyteId !== analyteId) {
+      throw new BadRequestException(
+        "Unit does not belong to the specified analyte",
+      );
+    }
+
+    return {
+      factor: Number(unit.factorToCanonical),
+      offset: Number(unit.offset),
+    };
+  }
 }

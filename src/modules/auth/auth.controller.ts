@@ -20,9 +20,8 @@ import { SignInDto } from "./dto/sign-in.dto";
 import { AuthResponseDto } from "./dto/auth-response.dto";
 import { JwtGuard } from "./guards/jwt.guard";
 import { LocalGuard } from "./guards/local.guard";
-import { CurrentUser } from "./decorators/current-user.decorator";
-import type { AuthenticatedUser } from "./decorators/current-user.decorator";
 import { User } from "@prisma/client";
+import { type AuthenticatedUser, CurrentUser } from "@/common/decorators";
 
 @ApiTags("Auth")
 @Controller("auth")
