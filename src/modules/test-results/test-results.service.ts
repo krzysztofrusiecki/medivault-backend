@@ -1,18 +1,22 @@
 import { Injectable, BadRequestException } from "@nestjs/common";
 import { PrismaService } from "@/infrastructure/prisma";
 import { AnalyteUnitsService } from "../analyte-units";
-import { Prisma, TestResult } from "@prisma/client";
+import { AnalytesService } from "../analytes";
+import { AnalyteValueType, Prisma, TestResult } from "@prisma/client";
 import { TestResultQueryDto } from "./dto/test-result-query.dto";
 import {
   TestResultResponseDto,
   TestResultItemDto,
 } from "./dto/test-result-response.dto";
+import { CreateNumericTestResultDto } from "./dto/create-numeric-test-result.dto";
+import { CreateTextTestResultDto } from "./dto/create-text-test-result.dto";
 
 @Injectable()
 export class TestResultsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly analyteUnitsService: AnalyteUnitsService,
+    private readonly analytesService: AnalytesService,
   ) {}
 
   async findAll(
@@ -62,6 +66,78 @@ export class TestResultsService {
     );
 
     return new TestResultResponseDto(items, page, pageSize, total);
+  }
+
+  async createNumeric(
+    userId: string,
+    dto: CreateNumericTestResultDto,
+  ): Promise<TestResultItemDto> {
+    const analyte = await this.analytesService.findOne(dto.analyteId);
+
+    if (analyte.valueType !== AnalyteValueType.NUMERIC) {
+      throw new BadRequestException("Analyte is not of type NUMERIC");
+    }
+
+    const { factor, offset } =
+      await this.analyteUnitsService.getConversionFactors(
+        dto.analyteUnitId,
+        dto.analyteId,
+      );
+
+    const canonicalValue = dto.value * factor + offset;
+
+    const result = await this.prisma.testResult.create({
+      data: {
+        userId,
+        analyteId: dto.analyteId,
+        analyteUnitId: dto.analyteUnitId,
+        valueRaw: dto.value,
+        value: canonicalValue,
+        factorSnapshot: factor,
+        offsetSnapshot: offset,
+        sampleDate: dto.sampleDate,
+      },
+      select: {
+        id: true,
+        analyteId: true,
+        analyteUnitId: true,
+        valueText: true,
+        value: true,
+        sampleDate: true,
+      },
+    });
+
+    return this.mapToResponseDto(result, factor, offset);
+  }
+
+  async createText(
+    userId: string,
+    dto: CreateTextTestResultDto,
+  ): Promise<TestResultItemDto> {
+    const analyte = await this.analytesService.findOne(dto.analyteId);
+
+    if (analyte.valueType !== AnalyteValueType.TEXT) {
+      throw new BadRequestException("Analyte is not of type TEXT");
+    }
+
+    const result = await this.prisma.testResult.create({
+      data: {
+        userId,
+        analyteId: dto.analyteId,
+        valueText: dto.value,
+        sampleDate: dto.sampleDate,
+      },
+      select: {
+        id: true,
+        analyteId: true,
+        analyteUnitId: true,
+        valueText: true,
+        value: true,
+        sampleDate: true,
+      },
+    });
+
+    return this.mapToResponseDto(result);
   }
 
   private validateQueryParams(query: TestResultQueryDto): void {
