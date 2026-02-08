@@ -1,4 +1,8 @@
-import { Injectable, BadRequestException } from "@nestjs/common";
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+} from "@nestjs/common";
 import { PrismaService } from "@/infrastructure/prisma";
 import { AnalyteUnitsService } from "../analyte-units";
 import { AnalytesService } from "../analytes";
@@ -138,6 +142,18 @@ export class TestResultsService {
     });
 
     return this.mapToResponseDto(result);
+  }
+
+  async delete(userId: string, id: string): Promise<void> {
+    const result = await this.prisma.testResult.findFirst({
+      where: { id, userId },
+    });
+
+    if (!result) {
+      throw new NotFoundException("Test result not found");
+    }
+
+    await this.prisma.testResult.delete({ where: { id } });
   }
 
   private validateQueryParams(query: TestResultQueryDto): void {

@@ -76,7 +76,9 @@ describe("TestResultsService", () => {
             testResult: {
               count: jest.fn(),
               findMany: jest.fn(),
+              findFirst: jest.fn(),
               create: jest.fn(),
+              delete: jest.fn(),
             },
           },
         },
@@ -348,6 +350,46 @@ describe("TestResultsService", () => {
       await expect(service.createText(mockUserId, textDto)).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe("delete", () => {
+    it("should delete a test result owned by the user", async () => {
+      jest
+        .spyOn(prismaService.testResult, "findFirst")
+        .mockResolvedValue(mockDbResult);
+      jest
+        .spyOn(prismaService.testResult, "delete")
+        .mockResolvedValue(mockDbResult);
+
+      await service.delete(mockUserId, "result123");
+
+      expect(prismaService.testResult.findFirst).toHaveBeenCalledWith({
+        where: { id: "result123", userId: mockUserId },
+      });
+      expect(prismaService.testResult.delete).toHaveBeenCalledWith({
+        where: { id: "result123" },
+      });
+    });
+
+    it("should throw NotFoundException if test result does not exist", async () => {
+      jest.spyOn(prismaService.testResult, "findFirst").mockResolvedValue(null);
+
+      await expect(service.delete(mockUserId, "nonexistent")).rejects.toThrow(
+        NotFoundException,
+      );
+
+      expect(prismaService.testResult.delete).not.toHaveBeenCalled();
+    });
+
+    it("should throw NotFoundException if test result belongs to another user", async () => {
+      jest.spyOn(prismaService.testResult, "findFirst").mockResolvedValue(null);
+
+      await expect(service.delete("other-user", "result123")).rejects.toThrow(
+        NotFoundException,
+      );
+
+      expect(prismaService.testResult.delete).not.toHaveBeenCalled();
     });
   });
 });
