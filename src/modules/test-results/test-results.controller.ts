@@ -1,9 +1,11 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
   Query,
   UseGuards,
@@ -90,5 +92,19 @@ export class TestResultsController {
     @Body() dto: CreateTextTestResultDto,
   ): Promise<TestResultItemDto> {
     return this.testResultsService.createText(user.id, dto);
+  }
+
+  @Delete("/:id")
+  @Roles("SUPER_ADMIN", "USER")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: "Delete a test result" })
+  @ApiResponse({ status: 204, description: "Test result deleted successfully" })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
+  @ApiResponse({ status: 404, description: "Test result not found" })
+  async delete(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+  ): Promise<void> {
+    return this.testResultsService.delete(user.id, id);
   }
 }
