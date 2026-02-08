@@ -1,6 +1,16 @@
-import { Controller, Get, Query, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Query,
+  UseGuards,
+} from "@nestjs/common";
 import {
   ApiBearerAuth,
+  ApiCreatedResponse,
   ApiOperation,
   ApiResponse,
   ApiTags,
@@ -9,7 +19,12 @@ import { JwtGuard } from "../auth/guards/jwt.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { TestResultsService } from "./test-results.service";
 import { TestResultQueryDto } from "./dto/test-result-query.dto";
-import { TestResultResponseDto } from "./dto/test-result-response.dto";
+import {
+  TestResultItemDto,
+  TestResultResponseDto,
+} from "./dto/test-result-response.dto";
+import { CreateNumericTestResultDto } from "./dto/create-numeric-test-result.dto";
+import { CreateTextTestResultDto } from "./dto/create-text-test-result.dto";
 import {
   type AuthenticatedUser,
   CurrentUser,
@@ -41,5 +56,39 @@ export class TestResultsController {
     @Query() query: TestResultQueryDto,
   ): Promise<TestResultResponseDto> {
     return this.testResultsService.findAll(user.id, query);
+  }
+
+  @Post("/numeric")
+  @Roles("SUPER_ADMIN", "USER")
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: "Create a numeric test result" })
+  @ApiCreatedResponse({
+    description: "Numeric test result created successfully",
+    type: TestResultItemDto,
+  })
+  @ApiResponse({ status: 400, description: "Bad request" })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
+  async createNumeric(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateNumericTestResultDto,
+  ): Promise<TestResultItemDto> {
+    return this.testResultsService.createNumeric(user.id, dto);
+  }
+
+  @Post("/text")
+  @Roles("SUPER_ADMIN", "USER")
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: "Create a text test result" })
+  @ApiCreatedResponse({
+    description: "Text test result created successfully",
+    type: TestResultItemDto,
+  })
+  @ApiResponse({ status: 400, description: "Bad request" })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
+  async createText(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateTextTestResultDto,
+  ): Promise<TestResultItemDto> {
+    return this.testResultsService.createText(user.id, dto);
   }
 }
