@@ -25,7 +25,7 @@ The app is focused on simplicity, accuracy, and scalability — built for users 
 - **ORM:** Prisma
 - **Database:** PostgreSQL (in-memory for testing)
 - **Validation:** Zod (for `.env` and DTOs)
-- **Auth:** JWT (access + refresh cookies), Argon2 password hashing
+- **Auth:** JWT, Argon2 password hashing
 - **Package manager:** pnpm
 
 ## Configuration
@@ -33,4 +33,18 @@ The app is focused on simplicity, accuracy, and scalability — built for users 
 - Environment variables validated with **Zod**.
 - Uses **pnpm** for dependency management and workspace support.
 - Code quality via **TypeScript**, **ESLint**, and **Prettier**.
-- Authentication handled with **JWT access tokens** and **HttpOnly refresh cookies**.
+- Authentication handled with **JWT access tokens**.
+
+---
+
+## Roadmap
+
+Currently implemented: auth (access-token only), analytes & units, and standalone test results.
+
+Planned, in order:
+
+1. **Test batches & labs** — group results entered together under a shared date/lab, with a `LAB_ADMIN` role for lab staff submitting results on behalf of patients.
+2. **Reference ranges** — compare results against normal ranges.
+3. **Auth hardening** — refresh tokens with HttpOnly cookies, logout, rotation.
+
+Parked for later: PDF report generation, and extracting results from photos/PDFs.
