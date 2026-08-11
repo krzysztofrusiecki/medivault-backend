@@ -1,4 +1,12 @@
-import { Body, Controller, Param, Patch, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+  UseGuards,
+} from "@nestjs/common";
 import {
   ApiBearerAuth,
   ApiConflictResponse,
@@ -22,9 +30,10 @@ import { Roles } from "@/common/decorators";
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-  @Patch("/:id/lab-admin")
+  @Post("/:id/actions/assign-lab")
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: "Attach a user to a Lab as LAB_ADMIN",
+    summary: "Assign a user to a Lab as LAB_ADMIN",
     description:
       "Attach an existing user to a Lab, setting their role to LAB_ADMIN and their labId. Required role: SUPER_ADMIN",
   })

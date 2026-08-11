@@ -169,7 +169,7 @@ describe("Labs & Lab-Admin attachment (e2e)", () => {
     });
   });
 
-  describe("PATCH /users/:id/lab-admin", () => {
+  describe("POST /users/:id/actions/assign-lab", () => {
     let labId: string;
 
     beforeAll(async () => {
@@ -181,7 +181,7 @@ describe("Labs & Lab-Admin attachment (e2e)", () => {
 
     it("allows SUPER_ADMIN to attach a user to a lab as LAB_ADMIN", async () => {
       const response = await request(app.getHttpServer())
-        .patch(`/api/users/${targetUserId}/lab-admin`)
+        .post(`/api/users/${targetUserId}/actions/assign-lab`)
         .set("Authorization", `Bearer ${superAdminToken}`)
         .send({ labId })
         .expect(200);
@@ -204,7 +204,7 @@ describe("Labs & Lab-Admin attachment (e2e)", () => {
 
     it("rejects non-SUPER_ADMIN users", async () => {
       await request(app.getHttpServer())
-        .patch(`/api/users/${regularUserId}/lab-admin`)
+        .post(`/api/users/${regularUserId}/actions/assign-lab`)
         .set("Authorization", `Bearer ${userToken}`)
         .send({ labId })
         .expect(403);
@@ -212,14 +212,14 @@ describe("Labs & Lab-Admin attachment (e2e)", () => {
 
     it("rejects unauthenticated requests", async () => {
       await request(app.getHttpServer())
-        .patch(`/api/users/${regularUserId}/lab-admin`)
+        .post(`/api/users/${regularUserId}/actions/assign-lab`)
         .send({ labId })
         .expect(401);
     });
 
     it("returns 404 when the user does not exist", async () => {
       await request(app.getHttpServer())
-        .patch("/api/users/nonexistent-id/lab-admin")
+        .post("/api/users/nonexistent-id/actions/assign-lab")
         .set("Authorization", `Bearer ${superAdminToken}`)
         .send({ labId })
         .expect(404);
@@ -227,7 +227,7 @@ describe("Labs & Lab-Admin attachment (e2e)", () => {
 
     it("returns 404 when the lab does not exist", async () => {
       await request(app.getHttpServer())
-        .patch(`/api/users/${regularUserId}/lab-admin`)
+        .post(`/api/users/${regularUserId}/actions/assign-lab`)
         .set("Authorization", `Bearer ${superAdminToken}`)
         .send({ labId: "nonexistent-lab-id" })
         .expect(404);
@@ -235,7 +235,7 @@ describe("Labs & Lab-Admin attachment (e2e)", () => {
 
     it("returns 409 when attaching an existing SUPER_ADMIN", async () => {
       await request(app.getHttpServer())
-        .patch(`/api/users/${superAdminId}/lab-admin`)
+        .post(`/api/users/${superAdminId}/actions/assign-lab`)
         .set("Authorization", `Bearer ${superAdminToken}`)
         .send({ labId })
         .expect(409);
