@@ -143,3 +143,13 @@ Parked for later: PDF report generation, extracting results from photos/PDFs.
 ## Git
 
 - Commit message should be short (1 line)
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in Linear under team **MV**, via an MCP/API integration. See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context layout — one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
