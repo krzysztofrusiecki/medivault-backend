@@ -8,6 +8,7 @@ import { AnalytesModule } from "./modules/analytes/analytes.module";
 import { AnalyteUnitsModule } from "./modules/analyte-units/analyte-units.module";
 import { TestResultsModule } from "./modules/test-results/test-results.module";
 import { LabsModule } from "./modules/labs/labs.module";
+import { TestBatchesModule } from "./modules/test-batches/test-batches.module";
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { LabsModule } from "./modules/labs/labs.module";
     AnalyteUnitsModule,
     TestResultsModule,
     LabsModule,
+    TestBatchesModule,
   ],
   controllers: [],
   providers: [],
