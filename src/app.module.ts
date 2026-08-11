@@ -7,6 +7,7 @@ import { AuthModule } from "./modules/auth/auth.module";
 import { AnalytesModule } from "./modules/analytes/analytes.module";
 import { AnalyteUnitsModule } from "./modules/analyte-units/analyte-units.module";
 import { TestResultsModule } from "./modules/test-results/test-results.module";
+import { LabsModule } from "./modules/labs/labs.module";
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { TestResultsModule } from "./modules/test-results/test-results.module";
     AnalytesModule,
     AnalyteUnitsModule,
     TestResultsModule,
+    LabsModule,
   ],
   controllers: [],
   providers: [],

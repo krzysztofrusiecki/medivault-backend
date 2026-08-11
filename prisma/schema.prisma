@@ -20,13 +20,29 @@ model User {
   gender       Gender?
   birthDate    DateTime?
   role         Role      @default(USER)
+  labId        String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  lab         Lab?         @relation(fields: [labId], references: [id])
   testResults TestResult[]
 
   @@map("users")
+}
+
+// A registered laboratory organization. LAB_ADMIN staff are attached to
+// exactly one Lab by a SUPER_ADMIN via User.labId.
+model Lab {
+  id   String @id @default(cuid())
+  name String @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  staff User[]
+
+  @@map("labs")
 }
 
 // Gender enum for user profile
