@@ -138,6 +138,7 @@ model TestBatch {
   lab  Lab? @relation(fields: [labId], references: [id])
 
   @@index([userId, status])
+  @@index([userId, sampleDate])
   @@map("test_batches")
 }
 

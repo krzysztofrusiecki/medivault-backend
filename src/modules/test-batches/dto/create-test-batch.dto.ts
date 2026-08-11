@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { Type } from "class-transformer";
+import { Transform, TransformFnParams, Type } from "class-transformer";
 import { IsDate, IsNotEmpty, IsOptional, IsString } from "class-validator";
 
 export class CreateTestBatchDto {
@@ -8,6 +8,9 @@ export class CreateTestBatchDto {
     example: "City Diagnostics",
   })
   @IsString()
+  @Transform(({ value }: TransformFnParams): unknown =>
+    typeof value === "string" ? value.trim() : value,
+  )
   @IsNotEmpty()
   labLabel: string;
 

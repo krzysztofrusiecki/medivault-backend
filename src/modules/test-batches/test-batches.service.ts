@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { Prisma, TestBatch, TestBatchStatus } from "@prisma/client";
 import { PrismaService } from "@/infrastructure/prisma";
 import { CreateTestBatchDto } from "./dto/create-test-batch.dto";
@@ -16,6 +16,8 @@ export class TestBatchesService {
     userId: string,
     dto: CreateTestBatchDto,
   ): Promise<TestBatchItemDto> {
+    this.assertExactlyOneLabReference(null, dto.labLabel);
+
     const batch = await this.prisma.testBatch.create({
       data: {
         userId,
@@ -53,6 +55,22 @@ export class TestBatchesService {
     const items = batches.map((b) => this.mapToResponseDto(b));
 
     return new TestBatchResponseDto(items, page, pageSize, total);
+  }
+
+  private assertExactlyOneLabReference(
+    labId: string | null | undefined,
+    labLabel: string | null | undefined,
+  ): void {
+    if (labId && labLabel) {
+      throw new BadRequestException(
+        "A batch cannot have both a labId and a labLabel",
+      );
+    }
+    if (!labId && !labLabel) {
+      throw new BadRequestException(
+        "A batch must have either a labId or a labLabel",
+      );
+    }
   }
 
   private mapToResponseDto(batch: TestBatch): TestBatchItemDto {

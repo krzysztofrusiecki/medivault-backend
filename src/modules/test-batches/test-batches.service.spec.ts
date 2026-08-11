@@ -1,4 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
+import { BadRequestException } from "@nestjs/common";
 import { TestBatchStatus } from "@prisma/client";
 import { PrismaService } from "@/infrastructure/prisma";
 import { TestBatchesService } from "./test-batches.service";
@@ -92,6 +93,14 @@ describe("TestBatchesService", () => {
           data: expect.not.objectContaining({ labId: expect.anything() }),
         }),
       );
+    });
+
+    it("should throw BadRequestException when labLabel is blank", async () => {
+      await expect(
+        service.createSelfReported(mockUserId, { ...createDto, labLabel: "" }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(prismaService.testBatch.create).not.toHaveBeenCalled();
     });
   });
 
