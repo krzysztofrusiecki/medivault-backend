@@ -1,0 +1,7 @@
+# Lab staff are attached manually by a SUPER_ADMIN, not via a self-service invite flow
+
+Status: accepted
+
+`LAB_ADMIN` attachment (MV-19) works by a `SUPER_ADMIN` calling `POST /users/:id/actions/assign-lab` against an *existing* MediVault account, setting that user's `role` to `LAB_ADMIN` and their `labId`. There is no lab-scoped admin tier, no invite mechanism, and no self-service onboarding — every attachment is a manual, one-at-a-time action performed by a `SUPER_ADMIN`, and the target account must already exist.
+
+We considered instead modeling the real-world lab onboarding flow: a lab signs a deal and provides a contact email; a `SUPER_ADMIN` registers the `Lab`, which schedules an invite email to that contact; the contact becomes a lab-scoped admin (a role above `LAB_ADMIN`, scoped to their one `Lab`) who can then invite further `LAB_ADMIN` staff themselves via email. We deferred this: it requires a new role tier, an invite/token mechanism, and outbound email infrastructure, none of which exist in this codebase yet. Manual `SUPER_ADMIN` attachment is a functional stopgap for the current phase (test batches & labs infra) but doesn't scale past a handful of labs onboarded by hand. Revisit once manual attachment becomes an onboarding bottleneck, or once outbound email infra gets built for another reason (e.g. batch-acceptance notifications) — tracked as [MV-24](https://linear.app/krzysztofrusiecki/issue/MV-24).
