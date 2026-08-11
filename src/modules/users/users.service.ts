@@ -1,11 +1,19 @@
-import { Injectable } from "@nestjs/common";
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { PrismaService } from "../../infrastructure/prisma/prisma.service";
 import * as argon2 from "argon2";
-import { Gender, User } from "@prisma/client";
+import { Gender, Role, User } from "@prisma/client";
+import { LabsService } from "../labs/labs.service";
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private labsService: LabsService,
+  ) {}
 
   /**
    * Create a new user
@@ -67,6 +75,7 @@ export class UsersService {
         gender: true,
         birthDate: true,
         role: true,
+        labId: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -84,5 +93,40 @@ export class UsersService {
     passwordHash: string,
   ): Promise<boolean> {
     return argon2.verify(passwordHash, password);
+  }
+
+  /**
+   * Attach an existing user to a Lab as LAB_ADMIN staff
+   * @param userId - The ID of the user to attach
+   * @param labId - The ID of the Lab to attach the user to
+   * @returns The updated user without passwordHash
+   */
+  async attachToLab(
+    userId: string,
+    labId: string,
+  ): Promise<Omit<User, "passwordHash">> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID "${userId}" not found`);
+    }
+
+    if (user.role === Role.SUPER_ADMIN) {
+      throw new ConflictException(
+        `User with ID "${userId}" is a SUPER_ADMIN and cannot be attached to a Lab`,
+      );
+    }
+
+    // Throws NotFoundException if the lab doesn't exist
+    await this.labsService.findOne(labId);
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: { role: Role.LAB_ADMIN, labId },
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { passwordHash, ...userResponse } = updatedUser;
+    return userResponse;
   }
 }

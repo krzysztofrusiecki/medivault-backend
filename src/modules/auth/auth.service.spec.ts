@@ -23,6 +23,7 @@ describe("AuthService", () => {
     role: Role.USER,
     gender: null,
     birthDate: null,
+    labId: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -77,6 +78,7 @@ describe("AuthService", () => {
         role: Role.USER,
         gender: null,
         birthDate: null,
+        labId: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       });
