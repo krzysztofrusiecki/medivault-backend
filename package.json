@@ -76,6 +76,18 @@
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@nestjs/core",
+      "@prisma/client",
+      "@prisma/engines",
+      "@scarf/scarf",
+      "argon2",
+      "better-sqlite3",
+      "prisma",
+      "unrs-resolver"
+    ]
+  },
   "jest": {
     "moduleFileExtensions": [
       "js",
