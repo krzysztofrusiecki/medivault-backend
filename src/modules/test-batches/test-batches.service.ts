@@ -1,7 +1,14 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { Prisma, TestBatch, TestBatchStatus } from "@prisma/client";
 import { PrismaService } from "@/infrastructure/prisma";
+import { UsersService } from "../users/users.service";
 import { CreateTestBatchDto } from "./dto/create-test-batch.dto";
+import { CreateLabVerifiedBatchDto } from "./dto/create-lab-verified-batch.dto";
 import { TestBatchQueryDto } from "./dto/test-batch-query.dto";
 import {
   TestBatchItemDto,
@@ -10,7 +17,10 @@ import {
 
 @Injectable()
 export class TestBatchesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly usersService: UsersService,
+  ) {}
 
   async createSelfReported(
     userId: string,
@@ -55,6 +65,69 @@ export class TestBatchesService {
     const items = batches.map((b) => this.mapToResponseDto(b));
 
     return new TestBatchResponseDto(items, page, pageSize, total);
+  }
+
+  async createLabVerified(
+    labAdminUserId: string,
+    dto: CreateLabVerifiedBatchDto,
+  ): Promise<TestBatchItemDto> {
+    const labId = await this.getOwnLabId(labAdminUserId);
+
+    const patient = await this.usersService.findByEmail(dto.patientEmail);
+    if (!patient) {
+      throw new NotFoundException(
+        `No user found with email "${dto.patientEmail}"`,
+      );
+    }
+
+    const batch = await this.prisma.testBatch.create({
+      data: {
+        userId: patient.id,
+        labId,
+        sampleDate: dto.sampleDate,
+        notes: dto.notes,
+        status: TestBatchStatus.PENDING_ACCEPTANCE,
+      },
+    });
+
+    return this.mapToResponseDto(batch);
+  }
+
+  async findAllForLab(
+    labAdminUserId: string,
+    query: TestBatchQueryDto,
+  ): Promise<TestBatchResponseDto> {
+    const labId = await this.getOwnLabId(labAdminUserId);
+    const { status, page = 1, pageSize = 25, sortOrder = "DESC" } = query;
+
+    const where: Prisma.TestBatchWhereInput = {
+      labId,
+      ...(status && { status }),
+    };
+
+    const [total, batches] = await Promise.all([
+      this.prisma.testBatch.count({ where }),
+      this.prisma.testBatch.findMany({
+        where,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        orderBy: { sampleDate: sortOrder.toLowerCase() as "asc" | "desc" },
+      }),
+    ]);
+
+    const items = batches.map((b) => this.mapToResponseDto(b));
+
+    return new TestBatchResponseDto(items, page, pageSize, total);
+  }
+
+  private async getOwnLabId(labAdminUserId: string): Promise<string> {
+    const labAdmin = await this.usersService.findById(labAdminUserId);
+
+    if (!labAdmin?.labId) {
+      throw new ForbiddenException("LAB_ADMIN is not attached to a lab");
+    }
+
+    return labAdmin.labId;
   }
 
   private assertExactlyOneLabReference(

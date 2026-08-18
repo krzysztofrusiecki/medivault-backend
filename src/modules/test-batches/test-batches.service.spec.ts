@@ -1,12 +1,18 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { BadRequestException } from "@nestjs/common";
-import { TestBatchStatus } from "@prisma/client";
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from "@nestjs/common";
+import { Role, TestBatchStatus } from "@prisma/client";
 import { PrismaService } from "@/infrastructure/prisma";
+import { UsersService } from "../users/users.service";
 import { TestBatchesService } from "./test-batches.service";
 
 describe("TestBatchesService", () => {
   let service: TestBatchesService;
   let prismaService: PrismaService;
+  let usersService: UsersService;
 
   const mockUserId = "user123";
   const mockSampleDate = new Date("2025-06-15");
@@ -19,6 +25,33 @@ describe("TestBatchesService", () => {
     sampleDate: mockSampleDate,
     notes: "Poor sleep, high stress",
     status: TestBatchStatus.ACCEPTED,
+    createdAt: mockSampleDate,
+    updatedAt: mockSampleDate,
+  };
+
+  const mockLabAdmin = {
+    id: "lab-admin-123",
+    email: "lab-admin@example.com",
+    firstName: "Lab",
+    lastName: "Admin",
+    gender: null,
+    birthDate: null,
+    role: Role.LAB_ADMIN,
+    labId: "lab-123",
+    createdAt: mockSampleDate,
+    updatedAt: mockSampleDate,
+  };
+
+  const mockPatient = {
+    id: "patient-123",
+    email: "patient@example.com",
+    passwordHash: "$argon2id$v=19$m=65536,t=3,p=4$test$hash",
+    firstName: "Pat",
+    lastName: "Ient",
+    gender: null,
+    birthDate: null,
+    role: Role.USER,
+    labId: null,
     createdAt: mockSampleDate,
     updatedAt: mockSampleDate,
   };
@@ -37,11 +70,19 @@ describe("TestBatchesService", () => {
             },
           },
         },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn(),
+            findByEmail: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
     service = module.get<TestBatchesService>(TestBatchesService);
     prismaService = module.get<PrismaService>(PrismaService);
+    usersService = module.get<UsersService>(UsersService);
   });
 
   afterEach(() => {
@@ -162,6 +203,128 @@ describe("TestBatchesService", () => {
 
       expect(result.items).toEqual([]);
       expect(result.pagination).toEqual({ page: 1, pageSize: 25, total: 0 });
+    });
+  });
+
+  describe("createLabVerified", () => {
+    const createDto = {
+      patientEmail: mockPatient.email,
+      sampleDate: mockSampleDate,
+      notes: "Fasting sample",
+    };
+
+    const mockLabVerifiedBatch = {
+      ...mockBatch,
+      id: "batch-lab-verified",
+      userId: mockPatient.id,
+      labId: mockLabAdmin.labId,
+      labLabel: null,
+      notes: "Fasting sample",
+      status: TestBatchStatus.PENDING_ACCEPTANCE,
+    };
+
+    it("creates a batch for the patient with the LAB_ADMIN's own labId and PENDING_ACCEPTANCE status", async () => {
+      jest.spyOn(usersService, "findById").mockResolvedValue(mockLabAdmin);
+      jest.spyOn(usersService, "findByEmail").mockResolvedValue(mockPatient);
+      jest
+        .spyOn(prismaService.testBatch, "create")
+        .mockResolvedValue(mockLabVerifiedBatch);
+
+      const result = await service.createLabVerified(
+        mockLabAdmin.id,
+        createDto,
+      );
+
+      expect(usersService.findByEmail).toHaveBeenCalledWith(mockPatient.email);
+      expect(prismaService.testBatch.create).toHaveBeenCalledWith({
+        data: {
+          userId: mockPatient.id,
+          labId: mockLabAdmin.labId,
+          sampleDate: mockSampleDate,
+          notes: "Fasting sample",
+          status: TestBatchStatus.PENDING_ACCEPTANCE,
+        },
+      });
+      expect(result).toEqual({
+        id: "batch-lab-verified",
+        labId: mockLabAdmin.labId,
+        labLabel: null,
+        sampleDate: "2025-06-15",
+        notes: "Fasting sample",
+        status: TestBatchStatus.PENDING_ACCEPTANCE,
+      });
+    });
+
+    it("throws NotFoundException when no user matches the patient email", async () => {
+      jest.spyOn(usersService, "findById").mockResolvedValue(mockLabAdmin);
+      jest.spyOn(usersService, "findByEmail").mockResolvedValue(null);
+
+      await expect(
+        service.createLabVerified(mockLabAdmin.id, createDto),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(prismaService.testBatch.create).not.toHaveBeenCalled();
+    });
+
+    it("throws ForbiddenException when the caller has no attached lab", async () => {
+      jest
+        .spyOn(usersService, "findById")
+        .mockResolvedValue({ ...mockLabAdmin, labId: null });
+
+      await expect(
+        service.createLabVerified(mockLabAdmin.id, createDto),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(usersService.findByEmail).not.toHaveBeenCalled();
+      expect(prismaService.testBatch.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("findAllForLab", () => {
+    it("scopes results to the caller's own lab", async () => {
+      jest.spyOn(usersService, "findById").mockResolvedValue(mockLabAdmin);
+      jest.spyOn(prismaService.testBatch, "count").mockResolvedValue(1);
+      jest
+        .spyOn(prismaService.testBatch, "findMany")
+        .mockResolvedValue([mockBatch]);
+
+      const result = await service.findAllForLab(mockLabAdmin.id, {});
+
+      expect(result.items).toHaveLength(1);
+      expect(prismaService.testBatch.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { labId: mockLabAdmin.labId } }),
+      );
+    });
+
+    it("filters by status", async () => {
+      jest.spyOn(usersService, "findById").mockResolvedValue(mockLabAdmin);
+      jest.spyOn(prismaService.testBatch, "count").mockResolvedValue(0);
+      jest.spyOn(prismaService.testBatch, "findMany").mockResolvedValue([]);
+
+      await service.findAllForLab(mockLabAdmin.id, {
+        status: TestBatchStatus.PENDING_ACCEPTANCE,
+      });
+
+      expect(prismaService.testBatch.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            labId: mockLabAdmin.labId,
+            status: TestBatchStatus.PENDING_ACCEPTANCE,
+          },
+        }),
+      );
+    });
+
+    it("throws ForbiddenException when the caller has no attached lab", async () => {
+      jest
+        .spyOn(usersService, "findById")
+        .mockResolvedValue({ ...mockLabAdmin, labId: null });
+
+      await expect(service.findAllForLab(mockLabAdmin.id, {})).rejects.toThrow(
+        ForbiddenException,
+      );
+
+      expect(prismaService.testBatch.findMany).not.toHaveBeenCalled();
     });
   });
 });
