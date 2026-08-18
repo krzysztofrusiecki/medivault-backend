@@ -314,6 +314,17 @@ describe("Test Batches (e2e)", () => {
         .expect(404);
     });
 
+    it("returns 404 when the email matches a non-patient account", async () => {
+      await request(app.getHttpServer())
+        .post("/api/test-batches/lab-verified")
+        .set("Authorization", `Bearer ${labAdminToken}`)
+        .send({
+          patientEmail: `test-batches-other-lab-admin-${suffix}@example.com`,
+          sampleDate: "2025-07-01",
+        })
+        .expect(404);
+    });
+
     it("rejects non-LAB_ADMIN users", async () => {
       await request(app.getHttpServer())
         .post("/api/test-batches/lab-verified")

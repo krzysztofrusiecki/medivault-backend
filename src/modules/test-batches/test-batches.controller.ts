@@ -87,7 +87,7 @@ export class TestBatchesController {
   @ApiResponse({ status: 401, description: "Unauthorized" })
   @ApiResponse({
     status: 404,
-    description: "No user account matches the given patient email",
+    description: "No patient account matches the given email",
   })
   async createLabVerified(
     @CurrentUser() user: AuthenticatedUser,

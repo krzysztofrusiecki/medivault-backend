@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma, TestBatch, TestBatchStatus } from "@prisma/client";
+import { Prisma, Role, TestBatch, TestBatchStatus } from "@prisma/client";
 import { PrismaService } from "@/infrastructure/prisma";
 import { UsersService } from "../users/users.service";
 import { CreateTestBatchDto } from "./dto/create-test-batch.dto";
@@ -45,26 +45,7 @@ export class TestBatchesService {
     userId: string,
     query: TestBatchQueryDto,
   ): Promise<TestBatchResponseDto> {
-    const { status, page = 1, pageSize = 25, sortOrder = "DESC" } = query;
-
-    const where: Prisma.TestBatchWhereInput = {
-      userId,
-      ...(status && { status }),
-    };
-
-    const [total, batches] = await Promise.all([
-      this.prisma.testBatch.count({ where }),
-      this.prisma.testBatch.findMany({
-        where,
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        orderBy: { sampleDate: sortOrder.toLowerCase() as "asc" | "desc" },
-      }),
-    ]);
-
-    const items = batches.map((b) => this.mapToResponseDto(b));
-
-    return new TestBatchResponseDto(items, page, pageSize, total);
+    return this.paginate({ userId }, query);
   }
 
   async createLabVerified(
@@ -74,9 +55,9 @@ export class TestBatchesService {
     const labId = await this.getOwnLabId(labAdminUserId);
 
     const patient = await this.usersService.findByEmail(dto.patientEmail);
-    if (!patient) {
+    if (!patient || patient.role !== Role.USER) {
       throw new NotFoundException(
-        `No user found with email "${dto.patientEmail}"`,
+        `No patient account found with email "${dto.patientEmail}"`,
       );
     }
 
@@ -98,10 +79,18 @@ export class TestBatchesService {
     query: TestBatchQueryDto,
   ): Promise<TestBatchResponseDto> {
     const labId = await this.getOwnLabId(labAdminUserId);
+
+    return this.paginate({ labId }, query);
+  }
+
+  private async paginate(
+    scope: Pick<Prisma.TestBatchWhereInput, "userId" | "labId">,
+    query: TestBatchQueryDto,
+  ): Promise<TestBatchResponseDto> {
     const { status, page = 1, pageSize = 25, sortOrder = "DESC" } = query;
 
     const where: Prisma.TestBatchWhereInput = {
-      labId,
+      ...scope,
       ...(status && { status }),
     };
 

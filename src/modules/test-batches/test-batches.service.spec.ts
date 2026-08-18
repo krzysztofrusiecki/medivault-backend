@@ -266,6 +266,19 @@ describe("TestBatchesService", () => {
       expect(prismaService.testBatch.create).not.toHaveBeenCalled();
     });
 
+    it("throws NotFoundException when the matched account is not a patient (USER)", async () => {
+      jest.spyOn(usersService, "findById").mockResolvedValue(mockLabAdmin);
+      jest
+        .spyOn(usersService, "findByEmail")
+        .mockResolvedValue({ ...mockPatient, role: Role.LAB_ADMIN });
+
+      await expect(
+        service.createLabVerified(mockLabAdmin.id, createDto),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(prismaService.testBatch.create).not.toHaveBeenCalled();
+    });
+
     it("throws ForbiddenException when the caller has no attached lab", async () => {
       jest
         .spyOn(usersService, "findById")
