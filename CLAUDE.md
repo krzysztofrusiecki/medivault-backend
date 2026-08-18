@@ -143,6 +143,8 @@ Parked for later: PDF report generation, extracting results from photos/PDFs.
 ## Git
 
 - Commit message should be short (1 line)
+- Never commit directly to `master` — always work on a branch
+- Branch naming convention: `feat/MV-{ticket}-{short description}` (e.g. `feat/MV-20-patients-self-report-a-test-batch`)
 
 ## Agent skills
 
