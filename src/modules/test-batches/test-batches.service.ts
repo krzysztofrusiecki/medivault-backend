@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -104,6 +105,61 @@ export class TestBatchesService {
     const items = batches.map((b) => this.mapToResponseDto(b));
 
     return new TestBatchResponseDto(items, page, pageSize, total);
+  }
+
+  async accept(userId: string, batchId: string): Promise<TestBatchItemDto> {
+    return this.transitionPendingBatch(
+      userId,
+      batchId,
+      TestBatchStatus.ACCEPTED,
+    );
+  }
+
+  async decline(userId: string, batchId: string): Promise<TestBatchItemDto> {
+    return this.transitionPendingBatch(
+      userId,
+      batchId,
+      TestBatchStatus.DECLINED,
+    );
+  }
+
+  private async transitionPendingBatch(
+    userId: string,
+    batchId: string,
+    status: TestBatchStatus,
+  ): Promise<TestBatchItemDto> {
+    const batch = await this.prisma.testBatch.findUnique({
+      where: { id: batchId },
+    });
+
+    if (!batch || batch.userId !== userId) {
+      throw new NotFoundException(`Test batch with ID "${batchId}" not found`);
+    }
+
+    if (batch.status !== TestBatchStatus.PENDING_ACCEPTANCE) {
+      throw new ConflictException(
+        `Test batch with ID "${batchId}" is not pending acceptance`,
+      );
+    }
+
+    // Guard the write on the status checked above so a concurrent
+    // accept/decline on the same batch can't both succeed.
+    const { count } = await this.prisma.testBatch.updateMany({
+      where: { id: batchId, status: TestBatchStatus.PENDING_ACCEPTANCE },
+      data: { status },
+    });
+
+    if (count === 0) {
+      throw new ConflictException(
+        `Test batch with ID "${batchId}" is not pending acceptance`,
+      );
+    }
+
+    const updated = await this.prisma.testBatch.findUniqueOrThrow({
+      where: { id: batchId },
+    });
+
+    return this.mapToResponseDto(updated);
   }
 
   private async getOwnLabId(labAdminUserId: string): Promise<string> {
