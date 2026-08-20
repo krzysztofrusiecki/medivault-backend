@@ -5,7 +5,6 @@ import {
   HttpCode,
   HttpStatus,
   Param,
-  Patch,
   Post,
   Query,
   UseGuards,
@@ -107,8 +106,9 @@ export class TestBatchesController {
     return this.testBatchesService.createLabVerified(user.id, dto);
   }
 
-  @Patch("/:id/accept")
+  @Post("/:id/actions/accept")
   @Roles("SUPER_ADMIN", "USER")
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: "Accept a pending batch into the caller's confirmed history",
   })
@@ -129,8 +129,9 @@ export class TestBatchesController {
     return this.testBatchesService.accept(user.id, id);
   }
 
-  @Patch("/:id/decline")
+  @Post("/:id/actions/decline")
   @Roles("SUPER_ADMIN", "USER")
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: "Decline a pending batch without deleting it",
   })
