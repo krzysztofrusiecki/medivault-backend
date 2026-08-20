@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
   Query,
   UseGuards,
@@ -103,5 +104,51 @@ export class TestBatchesController {
     @Body() dto: CreateLabVerifiedBatchDto,
   ): Promise<TestBatchItemDto> {
     return this.testBatchesService.createLabVerified(user.id, dto);
+  }
+
+  @Post("/:id/actions/accept")
+  @Roles("SUPER_ADMIN", "USER")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Accept a pending batch into the caller's confirmed history",
+  })
+  @ApiOkResponse({
+    description: "Batch accepted",
+    type: TestBatchItemDto,
+  })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
+  @ApiResponse({
+    status: 404,
+    description: "No batch with this ID belongs to the caller",
+  })
+  @ApiResponse({ status: 409, description: "Batch is not PENDING_ACCEPTANCE" })
+  async accept(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+  ): Promise<TestBatchItemDto> {
+    return this.testBatchesService.accept(user.id, id);
+  }
+
+  @Post("/:id/actions/decline")
+  @Roles("SUPER_ADMIN", "USER")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Decline a pending batch without deleting it",
+  })
+  @ApiOkResponse({
+    description: "Batch declined",
+    type: TestBatchItemDto,
+  })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
+  @ApiResponse({
+    status: 404,
+    description: "No batch with this ID belongs to the caller",
+  })
+  @ApiResponse({ status: 409, description: "Batch is not PENDING_ACCEPTANCE" })
+  async decline(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+  ): Promise<TestBatchItemDto> {
+    return this.testBatchesService.decline(user.id, id);
   }
 }

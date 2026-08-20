@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -104,6 +105,69 @@ export class TestBatchesService {
     const items = batches.map((b) => this.mapToResponseDto(b));
 
     return new TestBatchResponseDto(items, page, pageSize, total);
+  }
+
+  async accept(userId: string, batchId: string): Promise<TestBatchItemDto> {
+    return this.transitionPendingBatch(
+      userId,
+      batchId,
+      TestBatchStatus.ACCEPTED,
+    );
+  }
+
+  async decline(userId: string, batchId: string): Promise<TestBatchItemDto> {
+    return this.transitionPendingBatch(
+      userId,
+      batchId,
+      TestBatchStatus.DECLINED,
+    );
+  }
+
+  private async transitionPendingBatch(
+    userId: string,
+    batchId: string,
+    status: TestBatchStatus,
+  ): Promise<TestBatchItemDto> {
+    try {
+      // A single conditional write: only matches (and only then updates) a
+      // batch that is both owned by this caller and still PENDING_ACCEPTANCE,
+      // so a concurrent accept/decline on the same batch can't both succeed.
+      const updated = await this.prisma.testBatch.update({
+        where: {
+          id: batchId,
+          userId,
+          status: TestBatchStatus.PENDING_ACCEPTANCE,
+        },
+        data: { status },
+      });
+
+      return this.mapToResponseDto(updated);
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2025"
+      ) {
+        await this.rejectFailedTransition(userId, batchId);
+      }
+      throw error;
+    }
+  }
+
+  private async rejectFailedTransition(
+    userId: string,
+    batchId: string,
+  ): Promise<never> {
+    const batch = await this.prisma.testBatch.findUnique({
+      where: { id: batchId },
+    });
+
+    if (!batch || batch.userId !== userId) {
+      throw new NotFoundException(`Test batch with ID "${batchId}" not found`);
+    }
+
+    throw new ConflictException(
+      `Test batch with ID "${batchId}" is not pending acceptance`,
+    );
   }
 
   private async getOwnLabId(labAdminUserId: string): Promise<string> {
