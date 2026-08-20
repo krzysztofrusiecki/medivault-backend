@@ -143,10 +143,10 @@ describe("Test Batches (e2e)", () => {
     await app.close();
   });
 
-  describe("POST /test-batches", () => {
+  describe("POST /test-batches/self-reported", () => {
     it("creates a self-reported batch, immediately ACCEPTED", async () => {
       const response = await request(app.getHttpServer())
-        .post("/api/test-batches")
+        .post("/api/test-batches/self-reported")
         .set("Authorization", `Bearer ${userToken}`)
         .send({
           labLabel: `City Diagnostics ${suffix}`,
@@ -167,7 +167,7 @@ describe("Test Batches (e2e)", () => {
 
     it("creates a batch without optional notes", async () => {
       const response = await request(app.getHttpServer())
-        .post("/api/test-batches")
+        .post("/api/test-batches/self-reported")
         .set("Authorization", `Bearer ${userToken}`)
         .send({
           labLabel: `No Notes Lab ${suffix}`,
@@ -180,7 +180,7 @@ describe("Test Batches (e2e)", () => {
 
     it("rejects a blank labLabel", async () => {
       await request(app.getHttpServer())
-        .post("/api/test-batches")
+        .post("/api/test-batches/self-reported")
         .set("Authorization", `Bearer ${userToken}`)
         .send({ labLabel: "   ", sampleDate: "2025-06-15" })
         .expect(400);
@@ -188,7 +188,7 @@ describe("Test Batches (e2e)", () => {
 
     it("rejects a missing labLabel", async () => {
       await request(app.getHttpServer())
-        .post("/api/test-batches")
+        .post("/api/test-batches/self-reported")
         .set("Authorization", `Bearer ${userToken}`)
         .send({ sampleDate: "2025-06-15" })
         .expect(400);
@@ -196,7 +196,7 @@ describe("Test Batches (e2e)", () => {
 
     it("rejects unauthenticated requests", async () => {
       await request(app.getHttpServer())
-        .post("/api/test-batches")
+        .post("/api/test-batches/self-reported")
         .send({ labLabel: `Unauth Lab ${suffix}`, sampleDate: "2025-06-15" })
         .expect(401);
     });
@@ -224,55 +224,121 @@ describe("Test Batches (e2e)", () => {
             sampleDate: new Date("2025-03-01"),
             status: TestBatchStatus.ACCEPTED,
           },
+          {
+            userId,
+            labId,
+            sampleDate: new Date("2025-04-01"),
+            status: TestBatchStatus.PENDING_ACCEPTANCE,
+          },
+          {
+            userId,
+            labId,
+            sampleDate: new Date("2025-05-01"),
+            status: TestBatchStatus.ACCEPTED,
+          },
+          {
+            userId: otherUserId,
+            labId: otherLabId,
+            sampleDate: new Date("2025-05-15"),
+            status: TestBatchStatus.PENDING_ACCEPTANCE,
+          },
         ],
       });
     });
 
-    it("lists only the current user's batches", async () => {
-      const response = await request(app.getHttpServer())
-        .get("/api/test-batches")
-        .query({ pageSize: 100 })
-        .set("Authorization", `Bearer ${userToken}`)
-        .expect(200);
-
-      const body = response.body as {
-        items: { labLabel: string }[];
-        pagination: { total: number };
-      };
-      const labels = body.items.map((item) => item.labLabel);
-      expect(labels).toContain(`List Lab A ${suffix}`);
-      expect(labels).toContain(`List Lab B ${suffix}`);
-      expect(labels).not.toContain(`Other User Lab ${suffix}`);
-    });
-
-    it("does not leak another user's batches into their own list", async () => {
-      const response = await request(app.getHttpServer())
-        .get("/api/test-batches")
-        .query({ pageSize: 100 })
-        .set("Authorization", `Bearer ${otherUserToken}`)
-        .expect(200);
-
-      const body = response.body as { items: { labLabel: string }[] };
-      const labels = body.items.map((item) => item.labLabel);
-      expect(labels).toContain(`Other User Lab ${suffix}`);
-      expect(labels).not.toContain(`List Lab A ${suffix}`);
-    });
-
-    it("filters by status", async () => {
-      const response = await request(app.getHttpServer())
-        .get("/api/test-batches")
-        .query({ status: TestBatchStatus.DECLINED, pageSize: 100 })
-        .set("Authorization", `Bearer ${userToken}`)
-        .expect(200);
-
-      const body = response.body as { items: { labLabel: string }[] };
-      const labels = body.items.map((item) => item.labLabel);
-      expect(labels).toContain(`List Lab B ${suffix}`);
-      expect(labels).not.toContain(`List Lab A ${suffix}`);
-    });
-
     it("rejects unauthenticated requests", async () => {
       await request(app.getHttpServer()).get("/api/test-batches").expect(401);
+    });
+
+    describe("as USER", () => {
+      it("lists only the current user's batches", async () => {
+        const response = await request(app.getHttpServer())
+          .get("/api/test-batches")
+          .query({ pageSize: 100 })
+          .set("Authorization", `Bearer ${userToken}`)
+          .expect(200);
+
+        const body = response.body as {
+          items: { labLabel: string }[];
+          pagination: { total: number };
+        };
+        const labels = body.items.map((item) => item.labLabel);
+        expect(labels).toContain(`List Lab A ${suffix}`);
+        expect(labels).toContain(`List Lab B ${suffix}`);
+        expect(labels).not.toContain(`Other User Lab ${suffix}`);
+      });
+
+      it("does not leak another user's batches into their own list", async () => {
+        const response = await request(app.getHttpServer())
+          .get("/api/test-batches")
+          .query({ pageSize: 100 })
+          .set("Authorization", `Bearer ${otherUserToken}`)
+          .expect(200);
+
+        const body = response.body as { items: { labLabel: string }[] };
+        const labels = body.items.map((item) => item.labLabel);
+        expect(labels).toContain(`Other User Lab ${suffix}`);
+        expect(labels).not.toContain(`List Lab A ${suffix}`);
+      });
+
+      it("filters by status", async () => {
+        const response = await request(app.getHttpServer())
+          .get("/api/test-batches")
+          .query({ status: TestBatchStatus.DECLINED, pageSize: 100 })
+          .set("Authorization", `Bearer ${userToken}`)
+          .expect(200);
+
+        const body = response.body as { items: { labLabel: string }[] };
+        const labels = body.items.map((item) => item.labLabel);
+        expect(labels).toContain(`List Lab B ${suffix}`);
+        expect(labels).not.toContain(`List Lab A ${suffix}`);
+      });
+    });
+
+    describe("as LAB_ADMIN", () => {
+      it("lists only batches created for the caller's own lab", async () => {
+        const response = await request(app.getHttpServer())
+          .get("/api/test-batches")
+          .query({ pageSize: 100 })
+          .set("Authorization", `Bearer ${labAdminToken}`)
+          .expect(200);
+
+        const body = response.body as {
+          items: { id: string; labId: string | null; sampleDate: string }[];
+        };
+        const dates = body.items.map((item) => item.sampleDate);
+        expect(dates).toContain("2025-04-01");
+        expect(dates).toContain("2025-05-01");
+        expect(body.items.every((item) => item.labId === labId)).toBe(true);
+      });
+
+      it("does not leak another lab's batches", async () => {
+        const response = await request(app.getHttpServer())
+          .get("/api/test-batches")
+          .query({ pageSize: 100 })
+          .set("Authorization", `Bearer ${otherLabAdminToken}`)
+          .expect(200);
+
+        const body = response.body as {
+          items: { labId: string | null; sampleDate: string }[];
+        };
+        const dates = body.items.map((item) => item.sampleDate);
+        expect(dates).toContain("2025-05-15");
+        expect(dates).not.toContain("2025-04-01");
+      });
+
+      it("filters by status", async () => {
+        const response = await request(app.getHttpServer())
+          .get("/api/test-batches")
+          .query({ status: TestBatchStatus.PENDING_ACCEPTANCE, pageSize: 100 })
+          .set("Authorization", `Bearer ${labAdminToken}`)
+          .expect(200);
+
+        const body = response.body as { items: { sampleDate: string }[] };
+        const dates = body.items.map((item) => item.sampleDate);
+        expect(dates).toContain("2025-04-01");
+        expect(dates).not.toContain("2025-05-01");
+      });
     });
   });
 
@@ -343,90 +409,6 @@ describe("Test Batches (e2e)", () => {
           patientEmail: `test-batches-user-${suffix}@example.com`,
           sampleDate: "2025-07-01",
         })
-        .expect(401);
-    });
-  });
-
-  describe("GET /test-batches/lab-verified", () => {
-    beforeAll(async () => {
-      await prisma.testBatch.createMany({
-        data: [
-          {
-            userId,
-            labId,
-            sampleDate: new Date("2025-04-01"),
-            status: TestBatchStatus.PENDING_ACCEPTANCE,
-          },
-          {
-            userId,
-            labId,
-            sampleDate: new Date("2025-05-01"),
-            status: TestBatchStatus.ACCEPTED,
-          },
-          {
-            userId: otherUserId,
-            labId: otherLabId,
-            sampleDate: new Date("2025-05-15"),
-            status: TestBatchStatus.PENDING_ACCEPTANCE,
-          },
-        ],
-      });
-    });
-
-    it("lists only batches created for the caller's own lab", async () => {
-      const response = await request(app.getHttpServer())
-        .get("/api/test-batches/lab-verified")
-        .query({ pageSize: 100 })
-        .set("Authorization", `Bearer ${labAdminToken}`)
-        .expect(200);
-
-      const body = response.body as {
-        items: { id: string; labId: string | null; sampleDate: string }[];
-      };
-      const dates = body.items.map((item) => item.sampleDate);
-      expect(dates).toContain("2025-04-01");
-      expect(dates).toContain("2025-05-01");
-      expect(body.items.every((item) => item.labId === labId)).toBe(true);
-    });
-
-    it("does not leak another lab's batches", async () => {
-      const response = await request(app.getHttpServer())
-        .get("/api/test-batches/lab-verified")
-        .query({ pageSize: 100 })
-        .set("Authorization", `Bearer ${otherLabAdminToken}`)
-        .expect(200);
-
-      const body = response.body as {
-        items: { labId: string | null; sampleDate: string }[];
-      };
-      const dates = body.items.map((item) => item.sampleDate);
-      expect(dates).toContain("2025-05-15");
-      expect(dates).not.toContain("2025-04-01");
-    });
-
-    it("filters by status", async () => {
-      const response = await request(app.getHttpServer())
-        .get("/api/test-batches/lab-verified")
-        .query({ status: TestBatchStatus.PENDING_ACCEPTANCE, pageSize: 100 })
-        .set("Authorization", `Bearer ${labAdminToken}`)
-        .expect(200);
-
-      const body = response.body as { items: { sampleDate: string }[] };
-      const dates = body.items.map((item) => item.sampleDate);
-      expect(dates).toContain("2025-04-01");
-      expect(dates).not.toContain("2025-05-01");
-    });
-
-    it("rejects non-LAB_ADMIN users", async () => {
-      await request(app.getHttpServer())
-        .get("/api/test-batches/lab-verified")
-        .set("Authorization", `Bearer ${userToken}`)
-        .expect(403);
-    });
-
-    it("rejects unauthenticated requests", async () => {
-      await request(app.getHttpServer())
-        .get("/api/test-batches/lab-verified")
         .expect(401);
     });
   });

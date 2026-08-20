@@ -41,13 +41,6 @@ export class TestBatchesService {
     return this.mapToResponseDto(batch);
   }
 
-  async findAll(
-    userId: string,
-    query: TestBatchQueryDto,
-  ): Promise<TestBatchResponseDto> {
-    return this.paginate({ userId }, query);
-  }
-
   async createLabVerified(
     labAdminUserId: string,
     dto: CreateLabVerifiedBatchDto,
@@ -74,13 +67,17 @@ export class TestBatchesService {
     return this.mapToResponseDto(batch);
   }
 
-  async findAllForLab(
-    labAdminUserId: string,
+  async findAllForCaller(
+    userId: string,
+    role: Role,
     query: TestBatchQueryDto,
   ): Promise<TestBatchResponseDto> {
-    const labId = await this.getOwnLabId(labAdminUserId);
+    if (role === Role.LAB_ADMIN) {
+      const labId = await this.getOwnLabId(userId);
+      return this.paginate({ labId }, query);
+    }
 
-    return this.paginate({ labId }, query);
+    return this.paginate({ userId }, query);
   }
 
   private async paginate(

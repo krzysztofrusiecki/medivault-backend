@@ -145,14 +145,14 @@ describe("TestBatchesService", () => {
     });
   });
 
-  describe("findAll", () => {
-    it("should return paginated batches with defaults", async () => {
+  describe("findAllForCaller", () => {
+    it("should return paginated batches with defaults, scoped to the caller for USER", async () => {
       jest.spyOn(prismaService.testBatch, "count").mockResolvedValue(1);
       jest
         .spyOn(prismaService.testBatch, "findMany")
         .mockResolvedValue([mockBatch]);
 
-      const result = await service.findAll(mockUserId, {});
+      const result = await service.findAllForCaller(mockUserId, Role.USER, {});
 
       expect(result.items).toHaveLength(1);
       expect(result.items[0]).toEqual({
@@ -167,13 +167,14 @@ describe("TestBatchesService", () => {
       expect(prismaService.testBatch.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: { userId: mockUserId } }),
       );
+      expect(usersService.findById).not.toHaveBeenCalled();
     });
 
-    it("should filter by status", async () => {
+    it("should filter by status for a USER caller", async () => {
       jest.spyOn(prismaService.testBatch, "count").mockResolvedValue(0);
       jest.spyOn(prismaService.testBatch, "findMany").mockResolvedValue([]);
 
-      await service.findAll(mockUserId, {
+      await service.findAllForCaller(mockUserId, Role.USER, {
         status: TestBatchStatus.DECLINED,
       });
 
@@ -188,7 +189,7 @@ describe("TestBatchesService", () => {
       jest.spyOn(prismaService.testBatch, "count").mockResolvedValue(0);
       jest.spyOn(prismaService.testBatch, "findMany").mockResolvedValue([]);
 
-      await service.findAll("other-user", {});
+      await service.findAllForCaller("other-user", Role.USER, {});
 
       expect(prismaService.testBatch.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: { userId: "other-user" } }),
@@ -199,10 +200,60 @@ describe("TestBatchesService", () => {
       jest.spyOn(prismaService.testBatch, "count").mockResolvedValue(0);
       jest.spyOn(prismaService.testBatch, "findMany").mockResolvedValue([]);
 
-      const result = await service.findAll(mockUserId, {});
+      const result = await service.findAllForCaller(mockUserId, Role.USER, {});
 
       expect(result.items).toEqual([]);
       expect(result.pagination).toEqual({ page: 1, pageSize: 25, total: 0 });
+    });
+
+    it("scopes results to the caller's own lab for LAB_ADMIN", async () => {
+      jest.spyOn(usersService, "findById").mockResolvedValue(mockLabAdmin);
+      jest.spyOn(prismaService.testBatch, "count").mockResolvedValue(1);
+      jest
+        .spyOn(prismaService.testBatch, "findMany")
+        .mockResolvedValue([mockBatch]);
+
+      const result = await service.findAllForCaller(
+        mockLabAdmin.id,
+        Role.LAB_ADMIN,
+        {},
+      );
+
+      expect(result.items).toHaveLength(1);
+      expect(prismaService.testBatch.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { labId: mockLabAdmin.labId } }),
+      );
+    });
+
+    it("filters by status for a LAB_ADMIN caller", async () => {
+      jest.spyOn(usersService, "findById").mockResolvedValue(mockLabAdmin);
+      jest.spyOn(prismaService.testBatch, "count").mockResolvedValue(0);
+      jest.spyOn(prismaService.testBatch, "findMany").mockResolvedValue([]);
+
+      await service.findAllForCaller(mockLabAdmin.id, Role.LAB_ADMIN, {
+        status: TestBatchStatus.PENDING_ACCEPTANCE,
+      });
+
+      expect(prismaService.testBatch.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            labId: mockLabAdmin.labId,
+            status: TestBatchStatus.PENDING_ACCEPTANCE,
+          },
+        }),
+      );
+    });
+
+    it("throws ForbiddenException when a LAB_ADMIN caller has no attached lab", async () => {
+      jest
+        .spyOn(usersService, "findById")
+        .mockResolvedValue({ ...mockLabAdmin, labId: null });
+
+      await expect(
+        service.findAllForCaller(mockLabAdmin.id, Role.LAB_ADMIN, {}),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(prismaService.testBatch.findMany).not.toHaveBeenCalled();
     });
   });
 
@@ -290,54 +341,6 @@ describe("TestBatchesService", () => {
 
       expect(usersService.findByEmail).not.toHaveBeenCalled();
       expect(prismaService.testBatch.create).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("findAllForLab", () => {
-    it("scopes results to the caller's own lab", async () => {
-      jest.spyOn(usersService, "findById").mockResolvedValue(mockLabAdmin);
-      jest.spyOn(prismaService.testBatch, "count").mockResolvedValue(1);
-      jest
-        .spyOn(prismaService.testBatch, "findMany")
-        .mockResolvedValue([mockBatch]);
-
-      const result = await service.findAllForLab(mockLabAdmin.id, {});
-
-      expect(result.items).toHaveLength(1);
-      expect(prismaService.testBatch.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { labId: mockLabAdmin.labId } }),
-      );
-    });
-
-    it("filters by status", async () => {
-      jest.spyOn(usersService, "findById").mockResolvedValue(mockLabAdmin);
-      jest.spyOn(prismaService.testBatch, "count").mockResolvedValue(0);
-      jest.spyOn(prismaService.testBatch, "findMany").mockResolvedValue([]);
-
-      await service.findAllForLab(mockLabAdmin.id, {
-        status: TestBatchStatus.PENDING_ACCEPTANCE,
-      });
-
-      expect(prismaService.testBatch.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: {
-            labId: mockLabAdmin.labId,
-            status: TestBatchStatus.PENDING_ACCEPTANCE,
-          },
-        }),
-      );
-    });
-
-    it("throws ForbiddenException when the caller has no attached lab", async () => {
-      jest
-        .spyOn(usersService, "findById")
-        .mockResolvedValue({ ...mockLabAdmin, labId: null });
-
-      await expect(service.findAllForLab(mockLabAdmin.id, {})).rejects.toThrow(
-        ForbiddenException,
-      );
-
-      expect(prismaService.testBatch.findMany).not.toHaveBeenCalled();
     });
   });
 });
