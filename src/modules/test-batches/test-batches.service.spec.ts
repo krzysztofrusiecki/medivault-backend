@@ -5,7 +5,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from "@nestjs/common";
-import { Role, TestBatchStatus } from "@prisma/client";
+import { Prisma, Role, TestBatchStatus } from "@prisma/client";
 import { PrismaService } from "@/infrastructure/prisma";
 import { UsersService } from "../users/users.service";
 import { TestBatchesService } from "./test-batches.service";
@@ -36,6 +36,11 @@ describe("TestBatchesService", () => {
     userId: mockUserId,
     status: TestBatchStatus.PENDING_ACCEPTANCE,
   };
+
+  const noMatchingRowError = new Prisma.PrismaClientKnownRequestError(
+    "No record found for a filtered update",
+    { code: "P2025", clientVersion: "test" },
+  );
 
   const mockLabAdmin = {
     id: "lab-admin-123",
@@ -76,8 +81,7 @@ describe("TestBatchesService", () => {
               count: jest.fn(),
               findMany: jest.fn(),
               findUnique: jest.fn(),
-              findUniqueOrThrow: jest.fn(),
-              updateMany: jest.fn(),
+              update: jest.fn(),
             },
           },
         },
@@ -359,43 +363,41 @@ describe("TestBatchesService", () => {
     ["accept", TestBatchStatus.ACCEPTED] as const,
     ["decline", TestBatchStatus.DECLINED] as const,
   ])("%s", (method, targetStatus) => {
-    it(`moves the caller's PENDING_ACCEPTANCE batch to ${targetStatus}`, async () => {
-      jest
-        .spyOn(prismaService.testBatch, "findUnique")
-        .mockResolvedValue(mockPendingBatch);
-      jest
-        .spyOn(prismaService.testBatch, "updateMany")
-        .mockResolvedValue({ count: 1 });
-      jest
-        .spyOn(prismaService.testBatch, "findUniqueOrThrow")
-        .mockResolvedValue({
-          ...mockPendingBatch,
-          status: targetStatus,
-        });
+    it(`moves the caller's PENDING_ACCEPTANCE batch to ${targetStatus} in a single conditional write`, async () => {
+      jest.spyOn(prismaService.testBatch, "update").mockResolvedValue({
+        ...mockPendingBatch,
+        status: targetStatus,
+      });
 
       const result = await service[method](mockUserId, mockPendingBatch.id);
 
-      expect(prismaService.testBatch.updateMany).toHaveBeenCalledWith({
+      expect(prismaService.testBatch.update).toHaveBeenCalledWith({
         where: {
           id: mockPendingBatch.id,
+          userId: mockUserId,
           status: TestBatchStatus.PENDING_ACCEPTANCE,
         },
         data: { status: targetStatus },
       });
+      expect(prismaService.testBatch.findUnique).not.toHaveBeenCalled();
       expect(result.status).toBe(targetStatus);
     });
 
     it("throws NotFoundException when the batch doesn't exist", async () => {
+      jest
+        .spyOn(prismaService.testBatch, "update")
+        .mockRejectedValue(noMatchingRowError);
       jest.spyOn(prismaService.testBatch, "findUnique").mockResolvedValue(null);
 
       await expect(
         service[method](mockUserId, "missing-batch"),
       ).rejects.toThrow(NotFoundException);
-
-      expect(prismaService.testBatch.updateMany).not.toHaveBeenCalled();
     });
 
     it("throws NotFoundException when the batch belongs to another user", async () => {
+      jest
+        .spyOn(prismaService.testBatch, "update")
+        .mockRejectedValue(noMatchingRowError);
       jest
         .spyOn(prismaService.testBatch, "findUnique")
         .mockResolvedValue({ ...mockPendingBatch, userId: "other-user" });
@@ -403,11 +405,12 @@ describe("TestBatchesService", () => {
       await expect(
         service[method](mockUserId, mockPendingBatch.id),
       ).rejects.toThrow(NotFoundException);
-
-      expect(prismaService.testBatch.updateMany).not.toHaveBeenCalled();
     });
 
-    it("throws ConflictException when the batch isn't PENDING_ACCEPTANCE", async () => {
+    it("throws ConflictException when the batch isn't PENDING_ACCEPTANCE (including a concurrently-completed transition)", async () => {
+      jest
+        .spyOn(prismaService.testBatch, "update")
+        .mockRejectedValue(noMatchingRowError);
       jest.spyOn(prismaService.testBatch, "findUnique").mockResolvedValue({
         ...mockPendingBatch,
         status: TestBatchStatus.ACCEPTED,
@@ -416,23 +419,19 @@ describe("TestBatchesService", () => {
       await expect(
         service[method](mockUserId, mockPendingBatch.id),
       ).rejects.toThrow(ConflictException);
-
-      expect(prismaService.testBatch.updateMany).not.toHaveBeenCalled();
     });
 
-    it("throws ConflictException when a concurrent request already transitioned the batch", async () => {
+    it("propagates errors other than a missing-row conditional update", async () => {
+      const unexpectedError = new Error("connection lost");
       jest
-        .spyOn(prismaService.testBatch, "findUnique")
-        .mockResolvedValue(mockPendingBatch);
-      jest
-        .spyOn(prismaService.testBatch, "updateMany")
-        .mockResolvedValue({ count: 0 });
+        .spyOn(prismaService.testBatch, "update")
+        .mockRejectedValue(unexpectedError);
 
       await expect(
         service[method](mockUserId, mockPendingBatch.id),
-      ).rejects.toThrow(ConflictException);
+      ).rejects.toThrow(unexpectedError);
 
-      expect(prismaService.testBatch.findUniqueOrThrow).not.toHaveBeenCalled();
+      expect(prismaService.testBatch.findUnique).not.toHaveBeenCalled();
     });
   });
 });

@@ -128,6 +128,35 @@ export class TestBatchesService {
     batchId: string,
     status: TestBatchStatus,
   ): Promise<TestBatchItemDto> {
+    try {
+      // A single conditional write: only matches (and only then updates) a
+      // batch that is both owned by this caller and still PENDING_ACCEPTANCE,
+      // so a concurrent accept/decline on the same batch can't both succeed.
+      const updated = await this.prisma.testBatch.update({
+        where: {
+          id: batchId,
+          userId,
+          status: TestBatchStatus.PENDING_ACCEPTANCE,
+        },
+        data: { status },
+      });
+
+      return this.mapToResponseDto(updated);
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2025"
+      ) {
+        await this.rejectFailedTransition(userId, batchId);
+      }
+      throw error;
+    }
+  }
+
+  private async rejectFailedTransition(
+    userId: string,
+    batchId: string,
+  ): Promise<never> {
     const batch = await this.prisma.testBatch.findUnique({
       where: { id: batchId },
     });
@@ -136,30 +165,9 @@ export class TestBatchesService {
       throw new NotFoundException(`Test batch with ID "${batchId}" not found`);
     }
 
-    if (batch.status !== TestBatchStatus.PENDING_ACCEPTANCE) {
-      throw new ConflictException(
-        `Test batch with ID "${batchId}" is not pending acceptance`,
-      );
-    }
-
-    // Guard the write on the status checked above so a concurrent
-    // accept/decline on the same batch can't both succeed.
-    const { count } = await this.prisma.testBatch.updateMany({
-      where: { id: batchId, status: TestBatchStatus.PENDING_ACCEPTANCE },
-      data: { status },
-    });
-
-    if (count === 0) {
-      throw new ConflictException(
-        `Test batch with ID "${batchId}" is not pending acceptance`,
-      );
-    }
-
-    const updated = await this.prisma.testBatch.findUniqueOrThrow({
-      where: { id: batchId },
-    });
-
-    return this.mapToResponseDto(updated);
+    throw new ConflictException(
+      `Test batch with ID "${batchId}" is not pending acceptance`,
+    );
   }
 
   private async getOwnLabId(labAdminUserId: string): Promise<string> {
