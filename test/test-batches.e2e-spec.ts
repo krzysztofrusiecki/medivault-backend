@@ -268,6 +268,21 @@ describe("Test Batches (e2e)", () => {
         expect(labels).not.toContain(`Other User Lab ${suffix}`);
       });
 
+      it("does not include patientEmail on any item", async () => {
+        const response = await request(app.getHttpServer())
+          .get("/api/test-batches")
+          .query({ pageSize: 100 })
+          .set("Authorization", `Bearer ${userToken}`)
+          .expect(200);
+
+        const body = response.body as {
+          items: { patientEmail?: string }[];
+        };
+        expect(
+          body.items.every((item) => item.patientEmail === undefined),
+        ).toBe(true);
+      });
+
       it("does not leak another user's batches into their own list", async () => {
         const response = await request(app.getHttpServer())
           .get("/api/test-batches")
@@ -310,6 +325,22 @@ describe("Test Batches (e2e)", () => {
         expect(dates).toContain("2025-04-01");
         expect(dates).toContain("2025-05-01");
         expect(body.items.every((item) => item.labId === labId)).toBe(true);
+      });
+
+      it("includes the owning patient's email on each item", async () => {
+        const response = await request(app.getHttpServer())
+          .get("/api/test-batches")
+          .query({ pageSize: 100 })
+          .set("Authorization", `Bearer ${labAdminToken}`)
+          .expect(200);
+
+        const body = response.body as {
+          items: { sampleDate: string; patientEmail?: string }[];
+        };
+        const item = body.items.find((i) => i.sampleDate === "2025-04-01");
+        expect(item?.patientEmail).toBe(
+          `test-batches-user-${suffix}@example.com`,
+        );
       });
 
       it("does not leak another lab's batches", async () => {

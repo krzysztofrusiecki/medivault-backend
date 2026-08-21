@@ -75,7 +75,7 @@ export class TestBatchesService {
   ): Promise<TestBatchResponseDto> {
     if (role === Role.LAB_ADMIN) {
       const labId = await this.getOwnLabId(userId);
-      return this.paginate({ labId }, query);
+      return this.paginateForLabAdmin({ labId }, query);
     }
 
     return this.paginate({ userId }, query);
@@ -85,6 +85,46 @@ export class TestBatchesService {
     scope: Pick<Prisma.TestBatchWhereInput, "userId" | "labId">,
     query: TestBatchQueryDto,
   ): Promise<TestBatchResponseDto> {
+    const { where, skip, take, orderBy, page, pageSize } =
+      this.buildPaginationArgs(scope, query);
+
+    const [total, batches] = await Promise.all([
+      this.prisma.testBatch.count({ where }),
+      this.prisma.testBatch.findMany({ where, skip, take, orderBy }),
+    ]);
+
+    const items = batches.map((b) => this.mapToResponseDto(b));
+
+    return new TestBatchResponseDto(items, page, pageSize, total);
+  }
+
+  private async paginateForLabAdmin(
+    scope: Pick<Prisma.TestBatchWhereInput, "labId">,
+    query: TestBatchQueryDto,
+  ): Promise<TestBatchResponseDto> {
+    const { where, skip, take, orderBy, page, pageSize } =
+      this.buildPaginationArgs(scope, query);
+
+    const [total, batches] = await Promise.all([
+      this.prisma.testBatch.count({ where }),
+      this.prisma.testBatch.findMany({
+        where,
+        skip,
+        take,
+        orderBy,
+        include: { user: { select: { email: true } } },
+      }),
+    ]);
+
+    const items = batches.map((b) => this.mapToResponseDto(b, b.user.email));
+
+    return new TestBatchResponseDto(items, page, pageSize, total);
+  }
+
+  private buildPaginationArgs(
+    scope: Pick<Prisma.TestBatchWhereInput, "userId" | "labId">,
+    query: TestBatchQueryDto,
+  ) {
     const { status, page = 1, pageSize = 25, sortOrder = "DESC" } = query;
 
     const where: Prisma.TestBatchWhereInput = {
@@ -92,19 +132,14 @@ export class TestBatchesService {
       ...(status && { status }),
     };
 
-    const [total, batches] = await Promise.all([
-      this.prisma.testBatch.count({ where }),
-      this.prisma.testBatch.findMany({
-        where,
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        orderBy: { sampleDate: sortOrder.toLowerCase() as "asc" | "desc" },
-      }),
-    ]);
-
-    const items = batches.map((b) => this.mapToResponseDto(b));
-
-    return new TestBatchResponseDto(items, page, pageSize, total);
+    return {
+      where,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      orderBy: { sampleDate: sortOrder.toLowerCase() as "asc" | "desc" },
+      page,
+      pageSize,
+    };
   }
 
   async accept(userId: string, batchId: string): Promise<TestBatchItemDto> {
@@ -196,7 +231,10 @@ export class TestBatchesService {
     }
   }
 
-  private mapToResponseDto(batch: TestBatch): TestBatchItemDto {
+  private mapToResponseDto(
+    batch: TestBatch,
+    patientEmail?: string,
+  ): TestBatchItemDto {
     return {
       id: batch.id,
       labId: batch.labId,
@@ -204,6 +242,7 @@ export class TestBatchesService {
       sampleDate: batch.sampleDate.toISOString().split("T")[0],
       notes: batch.notes,
       status: batch.status,
+      patientEmail,
     };
   }
 }

@@ -226,7 +226,9 @@ describe("TestBatchesService", () => {
       jest.spyOn(prismaService.testBatch, "count").mockResolvedValue(1);
       jest
         .spyOn(prismaService.testBatch, "findMany")
-        .mockResolvedValue([mockBatch]);
+        .mockResolvedValue([
+          { ...mockBatch, user: { email: mockPatient.email } },
+        ] as unknown as (typeof mockBatch)[]);
 
       const result = await service.findAllForCaller(
         mockLabAdmin.id,
@@ -237,6 +239,43 @@ describe("TestBatchesService", () => {
       expect(result.items).toHaveLength(1);
       expect(prismaService.testBatch.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: { labId: mockLabAdmin.labId } }),
+      );
+    });
+
+    it("includes the patient's email on each item for LAB_ADMIN", async () => {
+      jest.spyOn(usersService, "findById").mockResolvedValue(mockLabAdmin);
+      jest.spyOn(prismaService.testBatch, "count").mockResolvedValue(1);
+      jest
+        .spyOn(prismaService.testBatch, "findMany")
+        .mockResolvedValue([
+          { ...mockBatch, user: { email: mockPatient.email } },
+        ] as unknown as (typeof mockBatch)[]);
+
+      const result = await service.findAllForCaller(
+        mockLabAdmin.id,
+        Role.LAB_ADMIN,
+        {},
+      );
+
+      expect(result.items[0].patientEmail).toBe(mockPatient.email);
+      expect(prismaService.testBatch.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: { user: { select: { email: true } } },
+        }),
+      );
+    });
+
+    it("does not include patientEmail for USER/SUPER_ADMIN callers", async () => {
+      jest.spyOn(prismaService.testBatch, "count").mockResolvedValue(1);
+      jest
+        .spyOn(prismaService.testBatch, "findMany")
+        .mockResolvedValue([mockBatch]);
+
+      const result = await service.findAllForCaller(mockUserId, Role.USER, {});
+
+      expect(result.items[0].patientEmail).toBeUndefined();
+      expect(prismaService.testBatch.findMany).toHaveBeenCalledWith(
+        expect.not.objectContaining({ include: expect.anything() }),
       );
     });
 
