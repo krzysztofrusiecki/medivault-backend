@@ -27,3 +27,7 @@ _Avoid_: Manual batch, patient batch
 
 **Declined batch**:
 A lab-verified `TestBatch` the patient rejected (e.g. a wrong-patient email match). Kept, not deleted — stays visible as an audit trail for the `LAB_ADMIN`/`SUPER_ADMIN`.
+
+**ReferenceRange**:
+A labeled band of `minValue`/`maxValue` (in the `Analyte`'s canonical unit) for a `NUMERIC` `Analyte`, optionally scoped to `gender` and/or an age band (`minAge`/`maxAge`), authored by `SUPER_ADMIN`. An `Analyte` may have several bands (e.g. "Deficient"/"Insufficient"/"Sufficient"/"Toxic" for Vitamin D3). The API serves all bands for an `Analyte` as-is; matching a `TestResult` to the applicable band is a frontend concern — see [ADR-0003](docs/adr/0003-reference-range-matching-is-client-side.md).
+_Avoid_: Normal range, threshold, panic value
