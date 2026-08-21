@@ -42,6 +42,13 @@ export class TestBatchItemDto {
     example: TestBatchStatus.ACCEPTED,
   })
   status: TestBatchStatus;
+
+  @ApiPropertyOptional({
+    description:
+      "Email of the patient this batch belongs to. Only populated when the caller is a LAB_ADMIN.",
+    example: "patient@example.com",
+  })
+  patientEmail?: string;
 }
 
 export class TestBatchResponseDto extends PaginatedResponseDto<TestBatchItemDto> {
