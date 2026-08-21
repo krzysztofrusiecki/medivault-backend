@@ -9,6 +9,12 @@ export class TestResultItemDto {
   id: string;
 
   @ApiProperty({
+    description: "ID of the batch this result belongs to",
+    example: "cuid567890",
+  })
+  batchId: string;
+
+  @ApiProperty({
     description: "ID of the analyte measured",
     example: "cuid789012",
   })
