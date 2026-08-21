@@ -1,8 +1,8 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { Type } from "class-transformer";
-import { IsDate, IsNotEmpty, IsNumber, IsString } from "class-validator";
+import { IsNotEmpty, IsNumber, IsString } from "class-validator";
+import { AttachToBatchDto } from "./attach-to-batch.dto";
 
-export class CreateNumericTestResultDto {
+export class CreateNumericTestResultDto extends AttachToBatchDto {
   @ApiProperty({
     description: "ID of the analyte being measured",
     example: "cuid123456",
@@ -18,15 +18,6 @@ export class CreateNumericTestResultDto {
   @IsString()
   @IsNotEmpty()
   analyteUnitId: string;
-
-  @ApiProperty({
-    description: "Date when the sample was taken",
-    example: "2025-06-15",
-  })
-  @IsNotEmpty()
-  @Type(() => Date)
-  @IsDate()
-  sampleDate: Date;
 
   @ApiProperty({
     description: "Numeric value of the measurement in the specified unit",

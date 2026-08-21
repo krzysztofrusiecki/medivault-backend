@@ -6,7 +6,8 @@ import {
 import { PrismaService } from "@/infrastructure/prisma";
 import { AnalyteUnitsService } from "../analyte-units";
 import { AnalytesService } from "../analytes";
-import { AnalyteValueType, Prisma, TestResult } from "@prisma/client";
+import { TestBatchesService } from "../test-batches";
+import { AnalyteValueType, Prisma } from "@prisma/client";
 import { TestResultQueryDto } from "./dto/test-result-query.dto";
 import {
   TestResultResponseDto,
@@ -15,12 +16,35 @@ import {
 import { CreateNumericTestResultDto } from "./dto/create-numeric-test-result.dto";
 import { CreateTextTestResultDto } from "./dto/create-text-test-result.dto";
 
+// Ad-hoc single-result entry doesn't collect a lab name, so the one-off
+// self-reported batch created behind the scenes needs a sentinel label.
+const AD_HOC_BATCH_LABEL = "Quick entry";
+
+const RESULT_SELECT = {
+  id: true,
+  batchId: true,
+  analyteId: true,
+  analyteUnitId: true,
+  valueText: true,
+  value: true,
+} satisfies Prisma.TestResultSelect;
+
+type SelectedResult = Prisma.TestResultGetPayload<{
+  select: typeof RESULT_SELECT;
+}>;
+
+interface ResolvedBatch {
+  id: string;
+  sampleDate: Date;
+}
+
 @Injectable()
 export class TestResultsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly analyteUnitsService: AnalyteUnitsService,
     private readonly analytesService: AnalytesService,
+    private readonly testBatchesService: TestBatchesService,
   ) {}
 
   async findAll(
@@ -34,8 +58,8 @@ export class TestResultsService {
       to,
       page = 1,
       pageSize = 25,
-      sortOrder = "DESC",
       sortBy = "sampleDate",
+      sortOrder = "DESC",
     } = query;
 
     this.validateQueryParams(query);
@@ -53,20 +77,19 @@ export class TestResultsService {
         where,
         skip: (page - 1) * pageSize,
         take: pageSize,
-        orderBy: { [sortBy]: sortOrder.toLowerCase() as "asc" | "desc" },
-        select: {
-          id: true,
-          analyteId: true,
-          analyteUnitId: true,
-          valueText: true,
-          value: true,
-          sampleDate: true,
+        orderBy: {
+          batch: { [sortBy]: sortOrder.toLowerCase() as "asc" | "desc" },
         },
+        select: { ...RESULT_SELECT, batch: { select: { sampleDate: true } } },
       }),
     ]);
 
     const items = results.map((r) =>
-      this.mapToResponseDto(r, conversion?.factor, conversion?.offset),
+      this.mapToResponseDto(
+        { ...r, sampleDate: r.batch.sampleDate },
+        conversion?.factor,
+        conversion?.offset,
+      ),
     );
 
     return new TestResultResponseDto(items, page, pageSize, total);
@@ -90,28 +113,26 @@ export class TestResultsService {
 
     const canonicalValue = dto.value * factor + offset;
 
+    const batch = await this.resolveBatch(userId, dto.batchId, dto.sampleDate);
+
     const result = await this.prisma.testResult.create({
       data: {
-        userId,
+        batchId: batch.id,
         analyteId: dto.analyteId,
         analyteUnitId: dto.analyteUnitId,
         valueRaw: dto.value,
         value: canonicalValue,
         factorSnapshot: factor,
         offsetSnapshot: offset,
-        sampleDate: dto.sampleDate,
       },
-      select: {
-        id: true,
-        analyteId: true,
-        analyteUnitId: true,
-        valueText: true,
-        value: true,
-        sampleDate: true,
-      },
+      select: RESULT_SELECT,
     });
 
-    return this.mapToResponseDto(result, factor, offset);
+    return this.mapToResponseDto(
+      { ...result, sampleDate: batch.sampleDate },
+      factor,
+      offset,
+    );
   }
 
   async createText(
@@ -124,29 +145,23 @@ export class TestResultsService {
       throw new BadRequestException("Analyte is not of type TEXT");
     }
 
+    const batch = await this.resolveBatch(userId, dto.batchId, dto.sampleDate);
+
     const result = await this.prisma.testResult.create({
       data: {
-        userId,
+        batchId: batch.id,
         analyteId: dto.analyteId,
         valueText: dto.value,
-        sampleDate: dto.sampleDate,
       },
-      select: {
-        id: true,
-        analyteId: true,
-        analyteUnitId: true,
-        valueText: true,
-        value: true,
-        sampleDate: true,
-      },
+      select: RESULT_SELECT,
     });
 
-    return this.mapToResponseDto(result);
+    return this.mapToResponseDto({ ...result, sampleDate: batch.sampleDate });
   }
 
   async delete(userId: string, id: string): Promise<void> {
     const result = await this.prisma.testResult.findFirst({
-      where: { id, userId },
+      where: { id, batch: { userId } },
     });
 
     if (!result) {
@@ -154,6 +169,46 @@ export class TestResultsService {
     }
 
     await this.prisma.testResult.delete({ where: { id } });
+  }
+
+  /**
+   * Either verifies the caller owns the given batch, or — when no batchId is
+   * supplied — creates a one-off self-reported batch on their behalf. Run
+   * last among a create*'s steps so a validation failure earlier never
+   * leaves behind an orphaned auto-created batch.
+   */
+  private async resolveBatch(
+    userId: string,
+    batchId: string | undefined,
+    sampleDate: Date | undefined,
+  ): Promise<ResolvedBatch> {
+    if (batchId) {
+      const batch = await this.prisma.testBatch.findFirst({
+        where: { id: batchId, userId },
+        select: { id: true, sampleDate: true },
+      });
+
+      if (!batch) {
+        throw new NotFoundException(
+          `Test batch with ID "${batchId}" not found`,
+        );
+      }
+
+      return batch;
+    }
+
+    if (!sampleDate) {
+      throw new BadRequestException(
+        "sampleDate is required when batchId is not provided",
+      );
+    }
+
+    const created = await this.testBatchesService.createSelfReported(userId, {
+      labLabel: AD_HOC_BATCH_LABEL,
+      sampleDate,
+    });
+
+    return { id: created.id, sampleDate };
   }
 
   private validateQueryParams(query: TestResultQueryDto): void {
@@ -185,24 +240,23 @@ export class TestResultsService {
   ): Prisma.TestResultWhereInput {
     const { analyteId, from, to } = filters;
     return {
-      userId,
+      batch: {
+        userId,
+        ...(from || to
+          ? {
+              sampleDate: {
+                ...(from && { gte: from }),
+                ...(to && { lte: to }),
+              },
+            }
+          : {}),
+      },
       ...(analyteId && { analyteId }),
-      ...(from || to
-        ? { sampleDate: { ...(from && { gte: from }), ...(to && { lte: to }) } }
-        : {}),
     };
   }
 
   private mapToResponseDto(
-    result: Omit<
-      TestResult,
-      | "userId"
-      | "valueRaw"
-      | "factorSnapshot"
-      | "offsetSnapshot"
-      | "createdAt"
-      | "updatedAt"
-    >,
+    result: SelectedResult & { sampleDate: Date },
     factor?: number,
     offset?: number,
   ): TestResultItemDto {
@@ -218,6 +272,7 @@ export class TestResultsService {
 
     return {
       id: result.id,
+      batchId: result.batchId,
       analyteId: result.analyteId,
       analyteUnitId: result.analyteUnitId,
       valueText: result.valueText,

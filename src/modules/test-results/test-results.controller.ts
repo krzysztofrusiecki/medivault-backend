@@ -70,6 +70,10 @@ export class TestResultsController {
   })
   @ApiResponse({ status: 400, description: "Bad request" })
   @ApiResponse({ status: 401, description: "Unauthorized" })
+  @ApiResponse({
+    status: 404,
+    description: "batchId does not refer to a batch owned by the caller",
+  })
   async createNumeric(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateNumericTestResultDto,
@@ -87,6 +91,10 @@ export class TestResultsController {
   })
   @ApiResponse({ status: 400, description: "Bad request" })
   @ApiResponse({ status: 401, description: "Unauthorized" })
+  @ApiResponse({
+    status: 404,
+    description: "batchId does not refer to a batch owned by the caller",
+  })
   async createText(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateTextTestResultDto,
