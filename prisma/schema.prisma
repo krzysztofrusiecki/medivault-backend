@@ -66,8 +66,9 @@ model Analyte {
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
-  units       AnalyteUnit[]
-  testResults TestResult[]
+  units           AnalyteUnit[]
+  testResults     TestResult[]
+  referenceRanges ReferenceRange[]
 
   @@map("analytes")
 }
@@ -90,6 +91,25 @@ model AnalyteUnit {
 
   @@unique([analyteId, unit])
   @@map("analyte_units")
+}
+
+model ReferenceRange {
+  id        String   @id @default(cuid())
+  analyteId String
+  label     String
+  gender    Gender?
+  minAge    Int?
+  maxAge    Int?
+  minValue  Decimal? @db.Decimal(20, 10)
+  maxValue  Decimal? @db.Decimal(20, 10)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  analyte Analyte @relation(fields: [analyteId], references: [id])
+
+  @@index([analyteId])
+  @@map("reference_ranges")
 }
 
 model TestResult {
@@ -120,7 +140,7 @@ model TestResult {
 // the patient (labLabel, free text) or submitted by a registered Lab
 // (labId). Exactly one of labId/labLabel is set, enforced at the app layer.
 model TestBatch {
-  id       String @id @default(cuid())
+  id       String  @id @default(cuid())
   userId   String
   labId    String?
   labLabel String?
