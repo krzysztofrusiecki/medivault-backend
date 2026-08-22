@@ -9,6 +9,7 @@ import { AnalyteUnitsModule } from "./modules/analyte-units/analyte-units.module
 import { TestResultsModule } from "./modules/test-results/test-results.module";
 import { LabsModule } from "./modules/labs/labs.module";
 import { TestBatchesModule } from "./modules/test-batches/test-batches.module";
+import { ReferenceRangesModule } from "./modules/reference-ranges/reference-ranges.module";
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { TestBatchesModule } from "./modules/test-batches/test-batches.module";
     TestResultsModule,
     LabsModule,
     TestBatchesModule,
+    ReferenceRangesModule,
   ],
   controllers: [],
   providers: [],
