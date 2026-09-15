@@ -31,3 +31,11 @@ A lab-verified `TestBatch` the patient rejected (e.g. a wrong-patient email matc
 **ReferenceRange**:
 A labeled band of `minValue`/`maxValue` (in the `Analyte`'s canonical unit) for a `NUMERIC` `Analyte`, optionally scoped to `gender` and/or an age band (`minAge`/`maxAge`), authored by `SUPER_ADMIN`. An `Analyte` may have several bands (e.g. "Deficient"/"Insufficient"/"Sufficient"/"Toxic" for Vitamin D3). The API serves all bands for an `Analyte` as-is; matching a `TestResult` to the applicable band is a frontend concern — see [ADR-0003](docs/adr/0003-reference-range-matching-is-client-side.md).
 _Avoid_: Normal range, threshold, panic value
+
+**Session**:
+The continuous lineage of one login, identified by a stable `familyId` that survives every token rotation. A user may hold several concurrent `Session`s (e.g. phone and laptop, each its own login). `POST /auth/logout` identifies the `Session` to end from the presented refresh cookie (not from the access token, which carries no session identity) and revokes only that one — not the user's other `Session`s — see [ADR-0004](docs/adr/0004-refresh-tokens-are-db-backed-rotated-per-session.md).
+_Avoid_: device, token family (implementation detail, not user-facing)
+
+**RefreshToken**:
+A DB-backed, hashed, single-use credential belonging to a `Session`, exchanged for a new access token at `POST /auth/refresh`. Rotated on every use — the presented row is marked used and replaced by a new one sharing the same `familyId`. Presenting an already-rotated row revokes the entire `Session`, not just that row. Delivered as an httpOnly cookie scoped to `Path=/api/auth` (reaches `/auth/refresh` and `/auth/logout`, nothing outside auth routes).
+_Avoid_: refresh JWT (it's an opaque random string, not a JWT)
