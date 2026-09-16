@@ -1,4 +1,4 @@
-export interface JwtPayload {
+export interface AccessTokenPayload {
   sub: string; // user id
   email: string;
   role: string;

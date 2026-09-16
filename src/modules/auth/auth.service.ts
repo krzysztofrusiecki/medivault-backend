@@ -3,20 +3,35 @@ import {
   ConflictException,
   BadRequestException,
   NotFoundException,
+  UnauthorizedException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { UsersService } from "../users/users.service";
 import { SignUpDto } from "./dto/sign-up.dto";
-import { AuthResponseDto } from "./dto/auth-response.dto";
-import { JwtPayload } from "./types/jwt-payload.type";
+import { AccessTokenPayload } from "./types/jwt-payload.type";
 import { SignInDto } from "./dto/sign-in.dto";
 import { Role, User } from "@prisma/client";
+import { ConfigService } from "@nestjs/config";
+import { Environment } from "@/config/schema";
+import { PrismaService } from "@/infrastructure/prisma";
+import { randomBytes, randomUUID, createHash } from "crypto";
+import { parseDurationMs } from "./utils/parse-duration";
+
+export interface IssuedTokenPair {
+  accessToken: string;
+  refreshToken: string;
+  refreshTokenExpiresInMs: number;
+}
+
+type AuthenticatedUserRecord = Pick<User, "id" | "email" | "role">;
 
 @Injectable()
 export class AuthService {
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
+    private configService: ConfigService<Environment>,
+    private prisma: PrismaService,
   ) {}
 
   /**
@@ -48,25 +63,94 @@ export class AuthService {
   }
 
   /**
-   * Sign in an existing user
+   * Sign in an existing user, starting a new session (refresh token family).
    * @param data - Sign in data
-   * @returns Access token
+   * @returns Access token and raw refresh token value
    */
-  async signIn(data: SignInDto): Promise<AuthResponseDto> {
+  async signIn(data: SignInDto): Promise<IssuedTokenPair> {
     const user = await this.validateUser(data.email, data.password);
     if (!user) {
       throw new BadRequestException("Invalid email or password");
     }
 
-    const accessToken = this.generateAccessToken(
-      user.id,
-      user.email,
-      user.role,
-    );
+    return this.issueTokenPair(user, randomUUID());
+  }
 
-    return {
-      accessToken,
-    };
+  /**
+   * Rotate a presented refresh token, detecting reuse of an already-rotated
+   * token as a theft signal.
+   * @param rawToken - The raw refresh token value presented by the client
+   * @returns Access token and new raw refresh token value
+   */
+  async refresh(rawToken: string): Promise<IssuedTokenPair> {
+    const tokenHash = this.hashToken(rawToken);
+    const stored = await this.prisma.refreshToken.findUnique({
+      where: { tokenHash },
+    });
+
+    if (!stored) {
+      throw new UnauthorizedException("Invalid refresh token");
+    }
+
+    if (stored.revokedAt) {
+      await this.prisma.refreshToken.updateMany({
+        where: { familyId: stored.familyId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      throw new UnauthorizedException(
+        "Refresh token reuse detected — session revoked",
+      );
+    }
+
+    if (stored.expiresAt < new Date()) {
+      throw new UnauthorizedException("Refresh token expired");
+    }
+
+    // A valid, unrevoked, unexpired row always has a live user: refresh
+    // tokens are cascade-deleted with their owning user, so this can't
+    // happen in practice. Guarded only to satisfy the compiler.
+    const user = await this.usersService.findById(stored.userId);
+    if (!user) {
+      throw new Error(
+        `Refresh token row ${stored.id} references a nonexistent user`,
+      );
+    }
+
+    await this.prisma.refreshToken.update({
+      where: { id: stored.id },
+      data: { revokedAt: new Date() },
+    });
+
+    return this.issueTokenPair(user, stored.familyId);
+  }
+
+  /**
+   * End the calling session by revoking its refresh token family.
+   * A missing or unrecognized token is treated as an idempotent no-op.
+   * @param rawToken - The raw refresh token value presented by the client, if any
+   * @param currentUserId - The id of the user making the request (from the access token)
+   */
+  async logout(
+    rawToken: string | undefined,
+    currentUserId: string,
+  ): Promise<void> {
+    if (!rawToken) {
+      return;
+    }
+
+    const tokenHash = this.hashToken(rawToken);
+    const stored = await this.prisma.refreshToken.findUnique({
+      where: { tokenHash },
+    });
+
+    if (!stored || stored.userId !== currentUserId) {
+      return;
+    }
+
+    await this.prisma.refreshToken.updateMany({
+      where: { familyId: stored.familyId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
   }
 
   /**
@@ -114,25 +198,51 @@ export class AuthService {
     };
   }
 
+  private hashToken(rawToken: string): string {
+    return createHash("sha256").update(rawToken).digest("hex");
+  }
+
   /**
-   * Generate JWT access token
-   * @param userId - User ID
-   * @param email - User email
-   * @param role - User role
-   * @returns JWT access token string
+   * Generate a JWT access token. Secret and expiry come from AuthModule's
+   * JwtModule.registerAsync (ACCESS_TOKEN_SECRET / ACCESS_TOKEN_EXPIRATION).
    */
-  private generateAccessToken(
-    userId: string,
-    email: string,
-    role: Role,
-  ): string {
-    const payload: JwtPayload = {
-      sub: userId,
-      email,
-      role,
+  private generateAccessToken(user: AuthenticatedUserRecord): string {
+    const payload: AccessTokenPayload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
     };
 
-    // Use the default secret and expiration from JWT module configuration
     return this.jwtService.sign(payload);
+  }
+
+  /**
+   * Issue a new access token and a new DB-backed opaque refresh token,
+   * recording the refresh token under the given family.
+   * @param familyId - Refresh token family id (stable across rotations within one session)
+   */
+  private async issueTokenPair(
+    user: AuthenticatedUserRecord,
+    familyId: string,
+  ): Promise<IssuedTokenPair> {
+    const accessToken = this.generateAccessToken(user);
+
+    // High-entropy opaque value — not a JWT, since there's nothing to
+    // self-describe once it's looked up by hash in the DB.
+    const refreshToken = randomBytes(32).toString("hex");
+    const refreshTokenExpiresInMs = parseDurationMs(
+      this.configService.get("REFRESH_TOKEN_EXPIRATION") ?? "30d",
+    );
+
+    await this.prisma.refreshToken.create({
+      data: {
+        familyId,
+        userId: user.id,
+        expiresAt: new Date(Date.now() + refreshTokenExpiresInMs),
+        tokenHash: this.hashToken(refreshToken),
+      },
+    });
+
+    return { accessToken, refreshToken, refreshTokenExpiresInMs };
   }
 }

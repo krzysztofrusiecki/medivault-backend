@@ -32,7 +32,13 @@
       ],
       "@/common/*": [
         "./src/common/*"
+      ],
+      "@/config/*": [
+        "./src/config/*"
       ]
-    }
+    },
+    "types": [
+      "jest"
+    ]
   }
 }

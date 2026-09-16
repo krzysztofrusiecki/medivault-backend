@@ -25,10 +25,28 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  lab         Lab?        @relation(fields: [labId], references: [id])
-  testBatches TestBatch[]
+  lab           Lab?           @relation(fields: [labId], references: [id])
+  testBatches   TestBatch[]
+  refreshTokens RefreshToken[]
 
   @@map("users")
+}
+
+// Refresh token model for secure auth
+model RefreshToken {
+  id        String    @id @default(cuid())
+  familyId  String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  userId    String
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([familyId])
+  @@map("refresh_tokens")
 }
 
 // A registered laboratory organization. LAB_ADMIN staff are attached to
