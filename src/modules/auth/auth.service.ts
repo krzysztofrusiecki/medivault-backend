@@ -12,7 +12,7 @@ import { AccessTokenPayload } from "./types/jwt-payload.type";
 import { SignInDto } from "./dto/sign-in.dto";
 import { Role, User } from "@prisma/client";
 import { ConfigService } from "@nestjs/config";
-import { Environment } from "src/config/schema";
+import { Environment } from "@/config/schema";
 import { PrismaService } from "@/infrastructure/prisma";
 import { randomBytes, randomUUID, createHash } from "crypto";
 import { parseDurationMs } from "./utils/parse-duration";
@@ -22,6 +22,8 @@ export interface IssuedTokenPair {
   refreshToken: string;
   refreshTokenExpiresInMs: number;
 }
+
+type AuthenticatedUserRecord = Pick<User, "id" | "email" | "role">;
 
 @Injectable()
 export class AuthService {
@@ -71,7 +73,7 @@ export class AuthService {
       throw new BadRequestException("Invalid email or password");
     }
 
-    return this.issueTokenPair(user.id, user.email, user.role, randomUUID());
+    return this.issueTokenPair(user, randomUUID());
   }
 
   /**
@@ -104,9 +106,14 @@ export class AuthService {
       throw new UnauthorizedException("Refresh token expired");
     }
 
+    // A valid, unrevoked, unexpired row always has a live user: refresh
+    // tokens are cascade-deleted with their owning user, so this can't
+    // happen in practice. Guarded only to satisfy the compiler.
     const user = await this.usersService.findById(stored.userId);
     if (!user) {
-      throw new UnauthorizedException("Invalid refresh token");
+      throw new Error(
+        `Refresh token row ${stored.id} references a nonexistent user`,
+      );
     }
 
     await this.prisma.refreshToken.update({
@@ -114,7 +121,7 @@ export class AuthService {
       data: { revokedAt: new Date() },
     });
 
-    return this.issueTokenPair(user.id, user.email, user.role, stored.familyId);
+    return this.issueTokenPair(user, stored.familyId);
   }
 
   /**
@@ -196,44 +203,29 @@ export class AuthService {
   }
 
   /**
-   * Generate JWT access token
-   * @param userId - User ID
-   * @param email - User email
-   * @param role - User role
-   * @returns JWT access token string
+   * Generate a JWT access token. Secret and expiry come from AuthModule's
+   * JwtModule.registerAsync (ACCESS_TOKEN_SECRET / ACCESS_TOKEN_EXPIRATION).
    */
-  private generateAccessToken(
-    userId: string,
-    email: string,
-    role: Role,
-  ): string {
+  private generateAccessToken(user: AuthenticatedUserRecord): string {
     const payload: AccessTokenPayload = {
-      sub: userId,
-      email,
-      role,
+      sub: user.id,
+      email: user.email,
+      role: user.role,
     };
 
-    return this.jwtService.sign(payload, {
-      secret: this.configService.get("ACCESS_TOKEN_SECRET"),
-      expiresIn: this.configService.get("ACCESS_TOKEN_EXPIRATION"),
-    });
+    return this.jwtService.sign(payload);
   }
 
   /**
    * Issue a new access token and a new DB-backed opaque refresh token,
    * recording the refresh token under the given family.
-   * @param userId - User ID
-   * @param email - User email
-   * @param role - User role
    * @param familyId - Refresh token family id (stable across rotations within one session)
    */
   private async issueTokenPair(
-    userId: string,
-    email: string,
-    role: Role,
+    user: AuthenticatedUserRecord,
     familyId: string,
   ): Promise<IssuedTokenPair> {
-    const accessToken = this.generateAccessToken(userId, email, role);
+    const accessToken = this.generateAccessToken(user);
 
     // High-entropy opaque value — not a JWT, since there's nothing to
     // self-describe once it's looked up by hash in the DB.
@@ -245,7 +237,7 @@ export class AuthService {
     await this.prisma.refreshToken.create({
       data: {
         familyId,
-        userId,
+        userId: user.id,
         expiresAt: new Date(Date.now() + refreshTokenExpiresInMs),
         tokenHash: this.hashToken(refreshToken),
       },

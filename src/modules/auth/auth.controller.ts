@@ -27,7 +27,7 @@ import { LocalGuard } from "./guards/local.guard";
 import { User } from "@prisma/client";
 import { type AuthenticatedUser, CurrentUser } from "@/common/decorators";
 import { type Request, type Response } from "express";
-import { Environment } from "src/config/schema";
+import { Environment } from "@/config/schema";
 import {
   REFRESH_TOKEN_COOKIE_NAME,
   getRefreshTokenCookieOptions,
@@ -105,9 +105,7 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthResponseDto> {
-    const token = req.cookies?.[REFRESH_TOKEN_COOKIE_NAME] as
-      | string
-      | undefined;
+    const token = this.getRefreshTokenFromRequest(req);
     if (!token) {
       throw new UnauthorizedException("No refresh token");
     }
@@ -139,9 +137,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<void> {
-    const token = req.cookies?.[REFRESH_TOKEN_COOKIE_NAME] as
-      | string
-      | undefined;
+    const token = this.getRefreshTokenFromRequest(req);
 
     await this.authService.logout(token, user.id);
 
@@ -167,6 +163,10 @@ export class AuthController {
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<Omit<User, "passwordHash">> {
     return this.authService.getUserDetails(user.id);
+  }
+
+  private getRefreshTokenFromRequest(req: Request): string | undefined {
+    return req.cookies?.[REFRESH_TOKEN_COOKIE_NAME] as string | undefined;
   }
 
   private setRefreshTokenCookie(

@@ -10,6 +10,7 @@
   "testTimeout": 30000,
   "moduleNameMapper": {
     "@/infrastructure/prisma": "<rootDir>/../src/infrastructure/prisma",
-    "@/common/(.*)": "<rootDir>/../src/common/$1"
+    "@/common/(.*)": "<rootDir>/../src/common/$1",
+    "@/config/(.*)": "<rootDir>/../src/config/$1"
   }
 }

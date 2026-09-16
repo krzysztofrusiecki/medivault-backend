@@ -1,6 +1,6 @@
 import { CookieOptions } from "express";
 import { ConfigService } from "@nestjs/config";
-import { Environment } from "src/config/schema";
+import { Environment } from "@/config/schema";
 
 // Shared across sign-in, refresh, and logout so the three call sites can't
 // drift out of sync with each other.

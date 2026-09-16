@@ -41,8 +41,6 @@ describe("AuthService", () => {
   };
 
   const configValues: Record<string, string> = {
-    ACCESS_TOKEN_SECRET: "access-token-secret-min-32-characters-long",
-    ACCESS_TOKEN_EXPIRATION: "15m",
     REFRESH_TOKEN_EXPIRATION: "30d",
   };
 
