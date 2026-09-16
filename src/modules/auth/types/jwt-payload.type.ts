@@ -5,10 +5,3 @@ export interface AccessTokenPayload {
   iat?: number;
   exp?: number;
 }
-
-export interface RefreshTokenPayload {
-  sub: string; // user id
-  familyId: string;
-  iat?: number;
-  exp?: number;
-}

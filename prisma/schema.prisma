@@ -36,15 +36,16 @@ model User {
 model RefreshToken {
   id        String    @id @default(cuid())
   familyId  String
-  tokenHash String
+  tokenHash String    @unique
   expiresAt DateTime
   revokedAt DateTime?
   userId    String
 
   createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([familyId])
   @@map("refresh_tokens")
 }
 

@@ -2,17 +2,29 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { AuthService } from "./auth.service";
 import { UsersService } from "../users/users.service";
 import { JwtService } from "@nestjs/jwt";
+import { ConfigService } from "@nestjs/config";
+import { PrismaService } from "@/infrastructure/prisma";
 import {
   ConflictException,
   BadRequestException,
   NotFoundException,
+  UnauthorizedException,
 } from "@nestjs/common";
 import { Role } from "@prisma/client";
+import { createHash } from "crypto";
 
 describe("AuthService", () => {
   let service: AuthService;
   let usersService: UsersService;
   let jwtService: JwtService;
+  let prisma: {
+    refreshToken: {
+      findUnique: jest.Mock;
+      update: jest.Mock;
+      updateMany: jest.Mock;
+      create: jest.Mock;
+    };
+  };
 
   const mockUserWithPasswordHash = {
     id: "user-123",
@@ -28,7 +40,22 @@ describe("AuthService", () => {
     updatedAt: new Date(),
   };
 
+  const configValues: Record<string, string> = {
+    ACCESS_TOKEN_SECRET: "access-token-secret-min-32-characters-long",
+    ACCESS_TOKEN_EXPIRATION: "15m",
+    REFRESH_TOKEN_EXPIRATION: "30d",
+  };
+
   beforeEach(async () => {
+    prisma = {
+      refreshToken: {
+        findUnique: jest.fn(),
+        update: jest.fn(),
+        updateMany: jest.fn(),
+        create: jest.fn(),
+      },
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
@@ -46,6 +73,16 @@ describe("AuthService", () => {
           useValue: {
             sign: jest.fn(),
           },
+        },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn((key: string) => configValues[key]),
+          },
+        },
+        {
+          provide: PrismaService,
+          useValue: prisma,
         },
       ],
     }).compile();
@@ -67,9 +104,7 @@ describe("AuthService", () => {
         birthDate: new Date("1990-01-01"),
       };
 
-      // User not found
       jest.spyOn(usersService, "findByEmail").mockResolvedValue(null);
-      // User created
       jest.spyOn(usersService, "create").mockResolvedValue({
         id: "new-user-id",
         email: signUpDto.email,
@@ -136,7 +171,7 @@ describe("AuthService", () => {
   });
 
   describe("signIn", () => {
-    it("should authenticate user and return auth response", async () => {
+    it("authenticates the user and issues a token pair backed by a new refresh token row", async () => {
       const signInDto = {
         email: mockUserWithPasswordHash.email,
         password: "password123",
@@ -146,22 +181,26 @@ describe("AuthService", () => {
         .spyOn(usersService, "findByEmail")
         .mockResolvedValue(mockUserWithPasswordHash);
       jest.spyOn(usersService, "verifyPassword").mockResolvedValue(true);
-      jest.spyOn(jwtService, "sign").mockReturnValue("mock-token");
+      jest.spyOn(jwtService, "sign").mockReturnValue("mock-access-token");
+      prisma.refreshToken.create.mockResolvedValue({});
 
       const result = await service.signIn(signInDto);
 
-      expect(result).toEqual({
-        accessToken: "mock-token",
-      });
-      expect(usersService.findByEmail).toHaveBeenCalledWith(signInDto.email);
-      expect(usersService.verifyPassword).toHaveBeenCalledWith(
-        signInDto.password,
-        mockUserWithPasswordHash.passwordHash,
+      expect(result.accessToken).toBe("mock-access-token");
+      expect(typeof result.refreshToken).toBe("string");
+      expect(result.refreshToken.length).toBeGreaterThan(0);
+      expect(result.refreshTokenExpiresInMs).toBeGreaterThan(0);
+
+      expect(prisma.refreshToken.create).toHaveBeenCalledTimes(1);
+      const createArgs = prisma.refreshToken.create.mock.calls[0][0];
+      expect(createArgs.data.userId).toBe(mockUserWithPasswordHash.id);
+      expect(createArgs.data.tokenHash).toBe(
+        createHash("sha256").update(result.refreshToken).digest("hex"),
       );
-      expect(jwtService.sign).toHaveBeenCalled();
+      expect(typeof createArgs.data.familyId).toBe("string");
     });
 
-    it("should throw BadRequestException for invalid credentials", async () => {
+    it("throws BadRequestException for invalid credentials", async () => {
       const signInDto = {
         email: "nonexistent@example.com",
         password: "wrongpassword",
@@ -171,6 +210,129 @@ describe("AuthService", () => {
 
       await expect(service.signIn(signInDto)).rejects.toThrow(
         BadRequestException,
+      );
+      expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("refresh", () => {
+    it("throws UnauthorizedException when the token is not found", async () => {
+      prisma.refreshToken.findUnique.mockResolvedValue(null);
+
+      await expect(service.refresh("unknown-token")).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("revokes the whole family and throws when a rotated-away token is reused", async () => {
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        id: "row-1",
+        familyId: "family-1",
+        userId: mockUserWithPasswordHash.id,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+        revokedAt: new Date(),
+      });
+
+      await expect(service.refresh("reused-token")).rejects.toThrow(
+        UnauthorizedException,
+      );
+
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ familyId: "family-1" }),
+          data: expect.objectContaining({ revokedAt: expect.any(Date) }),
+        }),
+      );
+      expect(usersService.findById).not.toHaveBeenCalled();
+    });
+
+    it("throws without revoking the family when the token is merely expired", async () => {
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        id: "row-1",
+        familyId: "family-1",
+        userId: mockUserWithPasswordHash.id,
+        expiresAt: new Date(Date.now() - 1000),
+        revokedAt: null,
+      });
+
+      await expect(service.refresh("expired-token")).rejects.toThrow(
+        UnauthorizedException,
+      );
+
+      expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
+      expect(prisma.refreshToken.update).not.toHaveBeenCalled();
+    });
+
+    it("rotates a valid token, keeping the same familyId", async () => {
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        id: "row-1",
+        familyId: "family-1",
+        userId: mockUserWithPasswordHash.id,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+        revokedAt: null,
+      });
+      jest
+        .spyOn(usersService, "findById")
+        .mockResolvedValue(mockUserWithPasswordHash);
+      jest.spyOn(jwtService, "sign").mockReturnValue("new-access-token");
+      prisma.refreshToken.create.mockResolvedValue({});
+
+      const result = await service.refresh("valid-token");
+
+      expect(prisma.refreshToken.update).toHaveBeenCalledWith({
+        where: { id: "row-1" },
+        data: { revokedAt: expect.any(Date) },
+      });
+      expect(prisma.refreshToken.create).toHaveBeenCalledTimes(1);
+      const createArgs = prisma.refreshToken.create.mock.calls[0][0];
+      expect(createArgs.data.familyId).toBe("family-1");
+      expect(result.accessToken).toBe("new-access-token");
+    });
+  });
+
+  describe("logout", () => {
+    it("is a no-op when no refresh token is presented", async () => {
+      await service.logout(undefined, mockUserWithPasswordHash.id);
+
+      expect(prisma.refreshToken.findUnique).not.toHaveBeenCalled();
+      expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("is a no-op when the token is not found", async () => {
+      prisma.refreshToken.findUnique.mockResolvedValue(null);
+
+      await service.logout("unknown-token", mockUserWithPasswordHash.id);
+
+      expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("is a no-op when the token belongs to a different user", async () => {
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        id: "row-1",
+        familyId: "family-1",
+        userId: "someone-else",
+      });
+
+      await service.logout("some-token", mockUserWithPasswordHash.id);
+
+      expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("revokes the whole family for the calling user's token", async () => {
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        id: "row-1",
+        familyId: "family-1",
+        userId: mockUserWithPasswordHash.id,
+      });
+
+      await service.logout("some-token", mockUserWithPasswordHash.id);
+
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ familyId: "family-1" }),
+          data: expect.objectContaining({ revokedAt: expect.any(Date) }),
+        }),
       );
     });
   });
@@ -238,13 +400,7 @@ describe("AuthService", () => {
         .spyOn(usersService, "findById")
         .mockResolvedValue(mockUserWithPasswordHash);
 
-      const result = await (
-        service as unknown as {
-          getUserDetails: (
-            id: string,
-          ) => Promise<typeof mockUserWithPasswordHash>;
-        }
-      ).getUserDetails(userId);
+      const result = await service.getUserDetails(userId);
 
       expect(result).toEqual(mockUserWithPasswordHash);
       expect(usersService.findById).toHaveBeenCalledWith(userId);
@@ -255,15 +411,9 @@ describe("AuthService", () => {
 
       jest.spyOn(usersService, "findById").mockResolvedValue(null);
 
-      await expect(
-        (
-          service as unknown as {
-            getUserDetails: (
-              id: string,
-            ) => Promise<typeof mockUserWithPasswordHash>;
-          }
-        ).getUserDetails(userId),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.getUserDetails(userId)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

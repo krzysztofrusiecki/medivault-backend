@@ -8,6 +8,7 @@ import {
   HttpStatus,
   Res,
   Req,
+  UnauthorizedException,
 } from "@nestjs/common";
 import {
   ApiTags,
@@ -16,6 +17,7 @@ import {
   ApiBearerAuth,
   ApiBody,
 } from "@nestjs/swagger";
+import { ConfigService } from "@nestjs/config";
 import { AuthService } from "./auth.service";
 import { SignUpDto } from "./dto/sign-up.dto";
 import { SignInDto } from "./dto/sign-in.dto";
@@ -25,11 +27,19 @@ import { LocalGuard } from "./guards/local.guard";
 import { User } from "@prisma/client";
 import { type AuthenticatedUser, CurrentUser } from "@/common/decorators";
 import { type Request, type Response } from "express";
+import { Environment } from "src/config/schema";
+import {
+  REFRESH_TOKEN_COOKIE_NAME,
+  getRefreshTokenCookieOptions,
+} from "./refresh-token-cookie";
 
 @ApiTags("Auth")
 @Controller("auth")
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private configService: ConfigService<Environment>,
+  ) {}
 
   @Post("/sign-up")
   @HttpCode(HttpStatus.CREATED)
@@ -69,12 +79,19 @@ export class AuthController {
     @Body() signInDto: SignInDto,
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthResponseDto> {
-    return this.authService.signIn(signInDto, res);
+    const { accessToken, refreshToken, refreshTokenExpiresInMs } =
+      await this.authService.signIn(signInDto);
+
+    this.setRefreshTokenCookie(res, refreshToken, refreshTokenExpiresInMs);
+
+    return { accessToken };
   }
 
   @Post("/refresh")
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Refresh access token" })
+  @ApiOperation({
+    summary: "Rotate the refresh token and issue a new access token",
+  })
   @ApiResponse({
     status: 200,
     description: "Access token successfully generated",
@@ -82,17 +99,56 @@ export class AuthController {
   })
   @ApiResponse({
     status: 401,
-    description: "No refresh token",
+    description: "Missing, invalid, expired, or reused refresh token",
   })
-  @ApiResponse({
-    status: 403,
-    description: "Invalid refresh token or token reuse detected",
-  })
-  async refreshAccessToken(
+  async refresh(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthResponseDto> {
-    return this.authService.refreshAccessToken(req, res);
+    const token = req.cookies?.[REFRESH_TOKEN_COOKIE_NAME] as
+      | string
+      | undefined;
+    if (!token) {
+      throw new UnauthorizedException("No refresh token");
+    }
+
+    const { accessToken, refreshToken, refreshTokenExpiresInMs } =
+      await this.authService.refresh(token);
+
+    this.setRefreshTokenCookie(res, refreshToken, refreshTokenExpiresInMs);
+
+    return { accessToken };
+  }
+
+  @Post("/logout")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(JwtGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Log out of the current session" })
+  @ApiResponse({
+    status: 204,
+    description:
+      "Session logged out (idempotent — succeeds even with no active session)",
+  })
+  @ApiResponse({
+    status: 401,
+    description: "Unauthorized",
+  })
+  async logout(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<void> {
+    const token = req.cookies?.[REFRESH_TOKEN_COOKIE_NAME] as
+      | string
+      | undefined;
+
+    await this.authService.logout(token, user.id);
+
+    res.clearCookie(
+      REFRESH_TOKEN_COOKIE_NAME,
+      getRefreshTokenCookieOptions(this.configService),
+    );
   }
 
   @Get("/me")
@@ -111,5 +167,16 @@ export class AuthController {
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<Omit<User, "passwordHash">> {
     return this.authService.getUserDetails(user.id);
+  }
+
+  private setRefreshTokenCookie(
+    res: Response,
+    refreshToken: string,
+    maxAge: number,
+  ): void {
+    res.cookie(REFRESH_TOKEN_COOKIE_NAME, refreshToken, {
+      ...getRefreshTokenCookieOptions(this.configService),
+      maxAge,
+    });
   }
 }
