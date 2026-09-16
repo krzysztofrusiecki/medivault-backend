@@ -6,6 +6,8 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Res,
+  Req,
 } from "@nestjs/common";
 import {
   ApiTags,
@@ -22,6 +24,7 @@ import { JwtGuard } from "./guards/jwt.guard";
 import { LocalGuard } from "./guards/local.guard";
 import { User } from "@prisma/client";
 import { type AuthenticatedUser, CurrentUser } from "@/common/decorators";
+import { type Request, type Response } from "express";
 
 @ApiTags("Auth")
 @Controller("auth")
@@ -62,8 +65,34 @@ export class AuthController {
     status: 401,
     description: "Invalid credentials",
   })
-  async signIn(@Body() signInDto: SignInDto): Promise<AuthResponseDto> {
-    return this.authService.signIn(signInDto);
+  async signIn(
+    @Body() signInDto: SignInDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<AuthResponseDto> {
+    return this.authService.signIn(signInDto, res);
+  }
+
+  @Post("/refresh")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Refresh access token" })
+  @ApiResponse({
+    status: 200,
+    description: "Access token successfully generated",
+    type: AuthResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: "No refresh token",
+  })
+  @ApiResponse({
+    status: 403,
+    description: "Invalid refresh token or token reuse detected",
+  })
+  async refreshAccessToken(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<AuthResponseDto> {
+    return this.authService.refreshAccessToken(req, res);
   }
 
   @Get("/me")

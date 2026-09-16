@@ -3,20 +3,36 @@ import {
   ConflictException,
   BadRequestException,
   NotFoundException,
+  UnauthorizedException,
+  ForbiddenException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { UsersService } from "../users/users.service";
 import { SignUpDto } from "./dto/sign-up.dto";
 import { AuthResponseDto } from "./dto/auth-response.dto";
-import { JwtPayload } from "./types/jwt-payload.type";
+import {
+  AccessTokenPayload,
+  RefreshTokenPayload,
+} from "./types/jwt-payload.type";
 import { SignInDto } from "./dto/sign-in.dto";
 import { Role, User } from "@prisma/client";
+import { ConfigService } from "@nestjs/config";
+import { Environment } from "src/config/schema";
+import { createId } from "@paralleldrive/cuid2";
+import { Request, Response } from "express";
+import { PrismaService } from "@/infrastructure/prisma";
+import crypto from "crypto";
+
+const REFRESH_TOKEN_EXPIRATION_DAYS = 7;
+const DAY_MS = 1000 * 60 * 60 * 24;
 
 @Injectable()
 export class AuthService {
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
+    private configService: ConfigService<Environment>,
+    private prisma: PrismaService,
   ) {}
 
   /**
@@ -52,17 +68,88 @@ export class AuthService {
    * @param data - Sign in data
    * @returns Access token
    */
-  async signIn(data: SignInDto): Promise<AuthResponseDto> {
+  async signIn(data: SignInDto, res: Response): Promise<AuthResponseDto> {
     const user = await this.validateUser(data.email, data.password);
     if (!user) {
       throw new BadRequestException("Invalid email or password");
     }
 
-    const accessToken = this.generateAccessToken(
+    const { accessToken, refreshToken } = await this.issueTokenPair(
       user.id,
       user.email,
       user.role,
     );
+
+    this.setRefreshTokenCookie(res, refreshToken);
+
+    return {
+      accessToken,
+    };
+  }
+
+  /**
+   * Refresh access token
+   * @param req Request
+   * @param res Response
+   * @returns Access token
+   */
+  async refreshAccessToken(
+    req: Request,
+    res: Response,
+  ): Promise<AuthResponseDto> {
+    const token = req.cookies.refreshToken;
+    if (!token) {
+      throw new UnauthorizedException("No refresh token");
+    }
+
+    try {
+      this.jwtService.verify(token, {
+        secret: this.configService.get("REFRESH_TOKEN_SECRET"),
+      });
+    } catch {
+      throw new ForbiddenException("Invalid refresh token");
+    }
+
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    const stored = await this.prisma.refreshToken.findFirst({
+      where: {
+        tokenHash,
+      },
+    });
+
+    if (!stored) {
+      throw new ForbiddenException("Invalid refresh token");
+    }
+
+    if (stored.revokedAt) {
+      await this.prisma.refreshToken.updateMany({
+        data: { revokedAt: new Date() },
+        where: { familyId: stored.familyId },
+      });
+      throw new ForbiddenException(
+        "Token reuse detected — all sessions revoked",
+      );
+    }
+
+    await this.prisma.refreshToken.update({
+      data: {
+        revokedAt: new Date(),
+      },
+      where: { id: stored.id },
+    });
+    const user = await this.usersService.findById(stored.userId);
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const { accessToken, refreshToken } = await this.issueTokenPair(
+      user.id,
+      user.email,
+      user.role,
+    );
+
+    this.setRefreshTokenCookie(res, refreshToken);
 
     return {
       accessToken,
@@ -115,6 +202,14 @@ export class AuthService {
   }
 
   /**
+   * Get refresh token in expiration
+   * @returns Expiration in ms
+   */
+  private getRefreshTokenExpirationInMs(): number {
+    return REFRESH_TOKEN_EXPIRATION_DAYS * DAY_MS;
+  }
+
+  /**
    * Generate JWT access token
    * @param userId - User ID
    * @param email - User email
@@ -126,13 +221,83 @@ export class AuthService {
     email: string,
     role: Role,
   ): string {
-    const payload: JwtPayload = {
+    const payload: AccessTokenPayload = {
       sub: userId,
       email,
       role,
     };
 
     // Use the default secret and expiration from JWT module configuration
-    return this.jwtService.sign(payload);
+    return this.jwtService.sign(payload, {
+      secret: this.configService.get("ACCESS_TOKEN_SECRET"),
+      expiresIn: "15m",
+    });
+  }
+
+  /**
+   * Generate JWT refresh token
+   * @param userId - User ID
+   * @param familyId - Token family ID
+   * @returns JWT refresh token string
+   */
+  private generateRefreshToken(userId: string, familyId: string): string {
+    const payload: RefreshTokenPayload = {
+      sub: userId,
+      familyId,
+    };
+
+    return this.jwtService.sign(payload, {
+      secret: this.configService.get("REFRESH_TOKEN_SECRET"),
+      expiresIn: `${REFRESH_TOKEN_EXPIRATION_DAYS}d`,
+    });
+  }
+
+  /**
+   * Issue token pair
+   * @param userId - User ID
+   * @param email - User email
+   * @param role - User role
+   * @returns JWT access token string
+   */
+  private async issueTokenPair(
+    userId: string,
+    email: string,
+    role: Role,
+  ): Promise<{ accessToken: string; refreshToken: string }> {
+    const accessToken = this.generateAccessToken(userId, email, role);
+
+    const familyId = createId();
+
+    const refreshToken = this.generateRefreshToken(userId, familyId);
+    await this.prisma.refreshToken.create({
+      data: {
+        familyId,
+        userId,
+        expiresAt: new Date(Date.now() + this.getRefreshTokenExpirationInMs()),
+        tokenHash: crypto
+          .createHash("sha256")
+          .update(refreshToken)
+          .digest("hex"),
+      },
+    });
+
+    return { accessToken, refreshToken };
+  }
+
+  /**
+   * Set refresh token cookie
+   * @param res Response
+   * @param refreshToken refresh token
+   */
+  private setRefreshTokenCookie(res: Response, refreshToken: string): void {
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure:
+        this.configService.get<Environment["NODE_ENV"]>("NODE_ENV") ===
+        "production",
+      sameSite: "strict",
+      path: "/api/auth",
+      maxAge: this.getRefreshTokenExpirationInMs(),
+    });
   }
 }
