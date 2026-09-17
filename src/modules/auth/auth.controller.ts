@@ -32,6 +32,10 @@ import {
   REFRESH_TOKEN_COOKIE_NAME,
   getRefreshTokenCookieOptions,
 } from "./refresh-token-cookie";
+import { Throttle, ThrottlerGuard } from "@nestjs/throttler";
+import { EmailThrottlerGuard } from "./guards/email-throttler.guard";
+
+const AUTH_THROTTLE = { default: { limit: 5, ttl: 1000 * 60 * 15 } };
 
 @ApiTags("Auth")
 @Controller("auth")
@@ -63,7 +67,10 @@ export class AuthController {
 
   @Post("/sign-in")
   @HttpCode(HttpStatus.OK)
-  @UseGuards(LocalGuard)
+  // Throttler must run before LocalGuard: it has to count failed-credential
+  // attempts too, not just successful sign-ins, to actually stop brute force.
+  @UseGuards(EmailThrottlerGuard, LocalGuard)
+  @Throttle(AUTH_THROTTLE)
   @ApiOperation({ summary: "Sign in with email and password" })
   @ApiBody({ type: SignInDto })
   @ApiResponse({
@@ -89,6 +96,8 @@ export class AuthController {
 
   @Post("/refresh")
   @HttpCode(HttpStatus.OK)
+  @UseGuards(ThrottlerGuard)
+  @Throttle(AUTH_THROTTLE)
   @ApiOperation({
     summary: "Rotate the refresh token and issue a new access token",
   })
